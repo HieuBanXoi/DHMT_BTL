@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+  "name": "opengl-cpp-starter",
+  "version-string": "1.0.0",
+  "description": "Môi trường OpenGL hiện đại",
+  "dependencies": [
+    "opengl",
+    "glm",
+    {
+      "name": "glad",
+      "features": [
+        "gl-api-46",
+        "extensions"
+      ]
+    },
+    {
+      "name": "glfw3" 
+    },
+    {
+      "name": "imgui",
+      "features": [
+        "glfw-binding",
+        "opengl3-binding",
+        "docking-experimental"
+      ]
+    },
+    "stb"
+  ],
+  "builtin-baseline": "13596c42018128edb32083a267c0c1ddfc935c1b"
+}
