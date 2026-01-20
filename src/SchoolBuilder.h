@@ -50,4 +50,28 @@ public:
     // Generates the scene root of a U-shaped school. size scales the overall footprint.
     // The returned node is a SceneNode::Ptr (shared ownership).
     static SceneNode::Ptr generateSchool(float size = 1.0f);
+    
+    // Update people animations (call this every frame with current time)
+    static void updatePeopleAnimation(SceneNode::Ptr root, float time);
+    
+    // Update clock animation (call this every frame with current time)
+    static void updateClockAnimation(SceneNode::Ptr root, float time);
+    
+    // Update cloud animation (call this every frame with current time)
+    static void updateCloudAnimation(SceneNode::Ptr root, float time);
+    
+    // Update bird animation (call this every frame with current time)
+    static void updateBirdAnimation(SceneNode::Ptr root, float time);
+    
+    // Store people nodes for animation
+    static std::vector<SceneNode::Ptr> s_people;
+    
+    // Store clock node for animation
+    static SceneNode::Ptr s_clock;
+    
+    // Store cloud nodes for animation
+    static std::vector<SceneNode::Ptr> s_clouds;
+    
+    // Store bird nodes for animation
+    static std::vector<SceneNode::Ptr> s_birds;
 };

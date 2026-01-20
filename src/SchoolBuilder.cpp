@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cmath>
+#include <string>
 
 // Helper to create a simple cuboid
 static std::shared_ptr<MeshNode> createCuboid(glm::vec3 size, glm::vec3 color, glm::vec3 pos)
@@ -532,56 +533,6 @@ static SceneNode::Ptr createParabolicArchGate(float width, float archHeight)
     );
     gateNode->AddChild(namePanel);
     
-    // Metal fence extending from the gate
-    glm::vec3 fenceColor(0.2f, 0.25f, 0.2f); // Dark green metal
-    float fenceHeight = 2.5f;
-    float fenceLength = 15.0f;
-    
-    // Left fence section
-    for (int i = 0; i < 20; ++i)
-    {
-        float xPos = -width/2.0f - baseWidth/2.0f - 0.5f - i * 0.8f;
-        if (xPos > -fenceLength)
-        {
-            auto bar = createCuboid(
-                glm::vec3(0.08f, fenceHeight, 0.08f),
-                fenceColor,
-                glm::vec3(xPos, fenceHeight/2.0f, 0.0f)
-            );
-            gateNode->AddChild(bar);
-        }
-    }
-    
-    // Right fence section
-    for (int i = 0; i < 20; ++i)
-    {
-        float xPos = width/2.0f + baseWidth/2.0f + 0.5f + i * 0.8f;
-        if (xPos < fenceLength)
-        {
-            auto bar = createCuboid(
-                glm::vec3(0.08f, fenceHeight, 0.08f),
-                fenceColor,
-                glm::vec3(xPos, fenceHeight/2.0f, 0.0f)
-            );
-            gateNode->AddChild(bar);
-        }
-    }
-    
-    // Horizontal fence rails
-    auto leftRail = createCuboid(
-        glm::vec3(fenceLength - width/2.0f, 0.08f, 0.08f),
-        fenceColor,
-        glm::vec3(-width/2.0f - (fenceLength - width/2.0f)/2.0f, fenceHeight * 0.3f, 0.0f)
-    );
-    auto rightRail = createCuboid(
-        glm::vec3(fenceLength - width/2.0f, 0.08f, 0.08f),
-        fenceColor,
-        glm::vec3(width/2.0f + (fenceLength - width/2.0f)/2.0f, fenceHeight * 0.3f, 0.0f)
-    );
-    
-    gateNode->AddChild(leftRail);
-    gateNode->AddChild(rightRail);
-    
     return gateNode;
 }
 
@@ -813,7 +764,1131 @@ static SceneNode::Ptr createStreetlight(float height)
     return light;
 }
 
+// Helper to create a flagpole with waving Vietnamese flag
+static SceneNode::Ptr createFlagpole(float height = 10.0f)
+{
+    auto flagpoleNode = std::make_shared<SceneNode>();
+    
+    // Pole (tall metal pole)
+    glm::vec3 poleColor(0.7f, 0.7f, 0.75f); // Silver/grey metal
+    float poleRadius = 0.08f;
+    
+    auto pole = createCuboid(
+        glm::vec3(poleRadius * 2, height, poleRadius * 2),
+        poleColor,
+        glm::vec3(0.0f, height/2.0f, 0.0f)
+    );
+    flagpoleNode->AddChild(pole);
+    
+    // Pole base (wider base for stability)
+    auto base = createCuboid(
+        glm::vec3(0.4f, 0.3f, 0.4f),
+        glm::vec3(0.5f, 0.5f, 0.5f), // Dark grey
+        glm::vec3(0.0f, 0.15f, 0.0f)
+    );
+    flagpoleNode->AddChild(base);
+    
+    // Pole top (decorative finial - gold sphere)
+    auto finial = createCuboid(
+        glm::vec3(0.2f, 0.2f, 0.2f),
+        glm::vec3(0.9f, 0.8f, 0.3f), // Gold color
+        glm::vec3(0.0f, height + 0.1f, 0.0f)
+    );
+    flagpoleNode->AddChild(finial);
+    
+    // Vietnamese flag (red background with yellow 5-point star)
+    // Flag positioned at TOP of pole, extending HORIZONTALLY along X axis
+    // FLAT FLAG - no wave animation
+    float flagWidth = 3.0f;  // Horizontal length (along X axis)
+    float flagHeight = 2.0f; // Vertical height (along Y axis)
+    float flagY = height - flagHeight/2.0f - 0.3f; // At top of pole
+    
+    // Create flat flag - single piece
+    int flagSegments = 20;
+    float segmentWidth = flagWidth / flagSegments;
+    
+    glm::vec3 flagRed(0.85f, 0.15f, 0.15f); // Vietnamese flag red
+    
+    for (int i = 0; i < flagSegments; ++i)
+    {
+        float xOffset = i * segmentWidth + segmentWidth/2.0f; // Start from pole (x=0)
+        
+        // Red background segment - completely flat, no waves
+        auto flagSegment = createCuboid(
+            glm::vec3(segmentWidth * 1.15f, flagHeight, 0.02f),
+            flagRed,
+            glm::vec3(xOffset, flagY, 0.0f)  // Z = 0, completely flat
+        );
+        flagpoleNode->AddChild(flagSegment);
+    }
+    
+    // Yellow 5-point star - pixel art approach for accuracy
+    glm::vec3 starColor(1.0f, 0.85f, 0.0f); // Yellow/gold
+    
+    // Star center position (middle of flag in X-Y plane)
+    glm::vec3 starCenter(flagWidth/2.0f, flagY, 0.0f);
+    
+    // Create star using pixel grid - ULTRA HIGH RESOLUTION
+    // Grid size: 31x31 for an extremely detailed 5-point star
+    // 1 = star pixel, 0 = empty
+    // Ngôi sao kích thước 31x31
+int starGrid[31][31] = {
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0},
+    {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
+    {0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0},
+    {0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0},
+    {0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0},
+    {0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0},
+    {0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0},
+    {0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0},
+    {0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0},
+    {0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0},
+    {0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0},
+    {0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0},
+    {0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0},
+    {0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0},
+    {0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0},
+    {0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0},
+    {0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0}
+};
+    float pixelSize = 0.035f; // Very small pixels for ultra-high resolution
+    int gridSize = 31;
+    
+    // Draw the star pixel by pixel
+    // Flag is in X-Y plane (facing Z), so:
+    // Grid row -> Y axis (vertical on flag)
+    // Grid col -> X axis (horizontal on flag)
+    for (int row = 0; row < gridSize; ++row)
+    {
+        for (int col = 0; col < gridSize; ++col)
+        {
+            if (starGrid[row][col] == 1)
+            {
+                // Calculate position
+                // Center the grid around starCenter
+                float x = starCenter.x + (col - gridSize/2.0f) * pixelSize;
+                float y = starCenter.y + (gridSize/2.0f - row) * pixelSize;
+                
+                auto pixel = createCuboid(
+                    glm::vec3(pixelSize, pixelSize, 0.04f),
+                    starColor,
+                    glm::vec3(x, y, starCenter.z)
+                );
+                flagpoleNode->AddChild(pixel);
+            }
+        }
+    }
 
+    
+    return flagpoleNode;
+}
+
+// Helper to create a stone bench
+static SceneNode::Ptr createStoneBench()
+{
+    auto benchNode = std::make_shared<SceneNode>();
+    
+    glm::vec3 stoneGray(0.6f, 0.6f, 0.65f);
+    glm::vec3 stoneDark(0.4f, 0.4f, 0.45f);
+    
+    float benchLength = 1.5f;
+    float benchWidth = 0.4f;
+    float benchHeight = 0.45f;
+    
+    // Seat
+    auto seat = createCuboid(glm::vec3(benchLength, 0.08f, benchWidth), stoneGray, glm::vec3(0.0f, benchHeight, 0.0f));
+    benchNode->AddChild(seat);
+    
+    // Backrest
+    auto backrest = createCuboid(glm::vec3(benchLength, 0.6f, 0.06f), stoneGray, glm::vec3(0.0f, benchHeight + 0.3f, -benchWidth/2.0f + 0.03f));
+    benchNode->AddChild(backrest);
+    
+    // Legs
+    float legW = 0.12f;
+    auto leg1 = createCuboid(glm::vec3(legW, benchHeight, legW), stoneDark, glm::vec3(-benchLength/2.0f + 0.16f, benchHeight/2.0f, benchWidth/2.0f - 0.11f));
+    auto leg2 = createCuboid(glm::vec3(legW, benchHeight, legW), stoneDark, glm::vec3(benchLength/2.0f - 0.16f, benchHeight/2.0f, benchWidth/2.0f - 0.11f));
+    auto leg3 = createCuboid(glm::vec3(legW, benchHeight, legW), stoneDark, glm::vec3(-benchLength/2.0f + 0.16f, benchHeight/2.0f, -benchWidth/2.0f + 0.11f));
+    auto leg4 = createCuboid(glm::vec3(legW, benchHeight, legW), stoneDark, glm::vec3(benchLength/2.0f - 0.16f, benchHeight/2.0f, -benchWidth/2.0f + 0.11f));
+    benchNode->AddChild(leg1);
+    benchNode->AddChild(leg2);
+    benchNode->AddChild(leg3);
+    benchNode->AddChild(leg4);
+    
+    // Base
+    auto base = createCuboid(glm::vec3(benchLength + 0.2f, 0.05f, benchWidth + 0.1f), stoneDark, glm::vec3(0.0f, 0.025f, 0.0f));
+    benchNode->AddChild(base);
+    
+    return benchNode;
+}
+
+// Helper to create picnic table
+static SceneNode::Ptr createPicnicTable()
+{
+    auto tableNode = std::make_shared<SceneNode>();
+    
+    glm::vec3 woodBrown(0.55f, 0.35f, 0.2f);
+    glm::vec3 woodDark(0.35f, 0.25f, 0.15f);
+    
+    float tableLength = 2.0f;
+    float tableWidth = 0.8f;
+    float tableHeight = 0.75f;
+    
+    // Table top planks
+    for (int i = 0; i < 5; ++i)
+    {
+        float z = -tableWidth/2.0f + i * (tableWidth/5.0f) + (tableWidth/10.0f);
+        auto plank = createCuboid(glm::vec3(tableLength, 0.05f, tableWidth/5.0f * 0.9f), woodBrown, glm::vec3(0.0f, tableHeight, z));
+        tableNode->AddChild(plank);
+    }
+    
+    // Table legs
+    float legS = 0.08f;
+    auto tleg1 = createCuboid(glm::vec3(legS, tableHeight, legS), woodDark, glm::vec3(-tableLength/2.0f + 0.15f, tableHeight/2.0f, -tableWidth/2.0f + 0.1f));
+    auto tleg2 = createCuboid(glm::vec3(legS, tableHeight, legS), woodDark, glm::vec3(tableLength/2.0f - 0.15f, tableHeight/2.0f, -tableWidth/2.0f + 0.1f));
+    auto tleg3 = createCuboid(glm::vec3(legS, tableHeight, legS), woodDark, glm::vec3(-tableLength/2.0f + 0.15f, tableHeight/2.0f, tableWidth/2.0f - 0.1f));
+    auto tleg4 = createCuboid(glm::vec3(legS, tableHeight, legS), woodDark, glm::vec3(tableLength/2.0f - 0.15f, tableHeight/2.0f, tableWidth/2.0f - 0.1f));
+    tableNode->AddChild(tleg1);
+    tableNode->AddChild(tleg2);
+    tableNode->AddChild(tleg3);
+    tableNode->AddChild(tleg4);
+    
+    // Benches
+    float benchH = 0.45f;
+    float benchDist = tableWidth/2.0f + 0.4f;
+    for (int side = 0; side < 2; ++side)
+    {
+        float zPos = (side == 0) ? -benchDist : benchDist;
+        auto bench1 = createCuboid(glm::vec3(tableLength - 0.2f, 0.04f, 0.135f), woodBrown, glm::vec3(0.0f, benchH, zPos - 0.075f));
+        auto bench2 = createCuboid(glm::vec3(tableLength - 0.2f, 0.04f, 0.135f), woodBrown, glm::vec3(0.0f, benchH, zPos + 0.075f));
+        auto bleg1 = createCuboid(glm::vec3(legS, benchH, legS), woodDark, glm::vec3(-tableLength/2.0f + 0.3f, benchH/2.0f, zPos));
+        auto bleg2 = createCuboid(glm::vec3(legS, benchH, legS), woodDark, glm::vec3(tableLength/2.0f - 0.3f, benchH/2.0f, zPos));
+        tableNode->AddChild(bench1);
+        tableNode->AddChild(bench2);
+        tableNode->AddChild(bleg1);
+        tableNode->AddChild(bleg2);
+    }
+    
+    return tableNode;
+}
+
+// Helper to create a simple person with articulated limbs for walking animation
+static SceneNode::Ptr createPerson(glm::vec3 shirtColor = glm::vec3(0.3f, 0.5f, 0.8f))
+{
+    auto personNode = std::make_shared<SceneNode>();
+    
+    glm::vec3 skinColor(0.9f, 0.7f, 0.6f);
+    glm::vec3 pantsColor(0.2f, 0.2f, 0.3f);
+    glm::vec3 hairColor(0.15f, 0.1f, 0.05f);
+    
+    float personHeight = 1.7f;
+    float headRadius = 0.12f;
+    float bodyWidth = 0.25f;
+    float bodyHeight = 0.6f;
+    float upperLegHeight = 0.25f;
+    float lowerLegHeight = 0.25f;
+    float upperArmLength = 0.2f;
+    float lowerArmLength = 0.2f;
+    
+    // Head
+    auto head = createCuboid(
+        glm::vec3(headRadius * 2, headRadius * 2, headRadius * 2),
+        skinColor,
+        glm::vec3(0.0f, personHeight - headRadius, 0.0f)
+    );
+    personNode->AddChild(head);
+    
+    // Hair
+    auto hair = createCuboid(
+        glm::vec3(headRadius * 2.2f, headRadius * 0.8f, headRadius * 2.2f),
+        hairColor,
+        glm::vec3(0.0f, personHeight - headRadius/2.0f, 0.0f)
+    );
+    personNode->AddChild(hair);
+    
+    // Body (torso)
+    auto torso = createCuboid(
+        glm::vec3(bodyWidth, bodyHeight, 0.15f),
+        shirtColor,
+        glm::vec3(0.0f, personHeight - headRadius * 2 - bodyHeight/2.0f, 0.0f)
+    );
+    personNode->AddChild(torso);
+    
+    // Arms - Create as separate nodes for animation
+    float shoulderY = personHeight - headRadius * 2 - 0.05f;
+    
+    // Left arm (upper + lower)
+    auto leftArmUpper = std::make_shared<SceneNode>();
+    auto leftArmUpperMesh = createCuboid(
+        glm::vec3(0.06f, upperArmLength, 0.06f),
+        shirtColor,
+        glm::vec3(0.0f, -upperArmLength/2.0f, 0.0f)
+    );
+    leftArmUpper->AddChild(leftArmUpperMesh);
+    leftArmUpper->SetLocalTransform(glm::translate(glm::mat4(1.0f), 
+        glm::vec3(-bodyWidth/2.0f - 0.03f, shoulderY, 0.0f)));
+    
+    auto leftArmLower = createCuboid(
+        glm::vec3(0.05f, lowerArmLength, 0.05f),
+        skinColor,
+        glm::vec3(0.0f, -upperArmLength - lowerArmLength/2.0f, 0.0f)
+    );
+    leftArmUpper->AddChild(leftArmLower);
+    personNode->AddChild(leftArmUpper);
+    
+    // Right arm (upper + lower)
+    auto rightArmUpper = std::make_shared<SceneNode>();
+    auto rightArmUpperMesh = createCuboid(
+        glm::vec3(0.06f, upperArmLength, 0.06f),
+        shirtColor,
+        glm::vec3(0.0f, -upperArmLength/2.0f, 0.0f)
+    );
+    rightArmUpper->AddChild(rightArmUpperMesh);
+    rightArmUpper->SetLocalTransform(glm::translate(glm::mat4(1.0f), 
+        glm::vec3(bodyWidth/2.0f + 0.03f, shoulderY, 0.0f)));
+    
+    auto rightArmLower = createCuboid(
+        glm::vec3(0.05f, lowerArmLength, 0.05f),
+        skinColor,
+        glm::vec3(0.0f, -upperArmLength - lowerArmLength/2.0f, 0.0f)
+    );
+    rightArmUpper->AddChild(rightArmLower);
+    personNode->AddChild(rightArmUpper);
+    
+    // Legs - Create as separate nodes for animation
+    float hipY = personHeight - headRadius * 2 - bodyHeight;
+    
+    // Left leg (upper + lower)
+    auto leftLegUpper = std::make_shared<SceneNode>();
+    auto leftLegUpperMesh = createCuboid(
+        glm::vec3(0.08f, upperLegHeight, 0.08f),
+        pantsColor,
+        glm::vec3(0.0f, -upperLegHeight/2.0f, 0.0f)
+    );
+    leftLegUpper->AddChild(leftLegUpperMesh);
+    leftLegUpper->SetLocalTransform(glm::translate(glm::mat4(1.0f), 
+        glm::vec3(-bodyWidth/4.0f, hipY, 0.0f)));
+    
+    auto leftLegLower = createCuboid(
+        glm::vec3(0.07f, lowerLegHeight, 0.07f),
+        pantsColor,
+        glm::vec3(0.0f, -upperLegHeight - lowerLegHeight/2.0f, 0.0f)
+    );
+    leftLegUpper->AddChild(leftLegLower);
+    
+    auto leftFoot = createCuboid(
+        glm::vec3(0.1f, 0.04f, 0.15f),
+        glm::vec3(0.1f, 0.1f, 0.1f),
+        glm::vec3(0.0f, -upperLegHeight - lowerLegHeight - 0.02f, 0.05f)
+    );
+    leftLegUpper->AddChild(leftFoot);
+    personNode->AddChild(leftLegUpper);
+    
+    // Right leg (upper + lower)
+    auto rightLegUpper = std::make_shared<SceneNode>();
+    auto rightLegUpperMesh = createCuboid(
+        glm::vec3(0.08f, upperLegHeight, 0.08f),
+        pantsColor,
+        glm::vec3(0.0f, -upperLegHeight/2.0f, 0.0f)
+    );
+    rightLegUpper->AddChild(rightLegUpperMesh);
+    rightLegUpper->SetLocalTransform(glm::translate(glm::mat4(1.0f), 
+        glm::vec3(bodyWidth/4.0f, hipY, 0.0f)));
+    
+    auto rightLegLower = createCuboid(
+        glm::vec3(0.07f, lowerLegHeight, 0.07f),
+        pantsColor,
+        glm::vec3(0.0f, -upperLegHeight - lowerLegHeight/2.0f, 0.0f)
+    );
+    rightLegUpper->AddChild(rightLegLower);
+    
+    auto rightFoot = createCuboid(
+        glm::vec3(0.1f, 0.04f, 0.15f),
+        glm::vec3(0.1f, 0.1f, 0.1f),
+        glm::vec3(0.0f, -upperLegHeight - lowerLegHeight - 0.02f, 0.05f)
+    );
+    rightLegUpper->AddChild(rightFoot);
+    personNode->AddChild(rightLegUpper);
+    
+    // Store limb references in children for animation access
+    // Order: 0=head, 1=hair, 2=torso, 3=leftArmUpper, 4=rightArmUpper, 5=leftLegUpper, 6=rightLegUpper
+    
+    return personNode;
+}
+
+// Helper to create a wall-mounted clock (no tower, no second hand)
+static SceneNode::Ptr createClock()
+{
+    auto clockNode = std::make_shared<SceneNode>();
+    
+    glm::vec3 clockFaceColor(0.95f, 0.95f, 0.95f); // White
+    glm::vec3 handColor(0.1f, 0.1f, 0.1f); // Black
+    glm::vec3 centerColor(0.8f, 0.7f, 0.3f); // Gold
+    
+    float clockRadius = 0.6f; // Smaller clock
+    
+    // Clock face (circular - approximated with thin box)
+    auto clockFace = createCuboid(
+        glm::vec3(clockRadius * 2, clockRadius * 2, 0.05f),
+        clockFaceColor,
+        glm::vec3(0.0f, 0.0f, 0.0f)
+    );
+    clockNode->AddChild(clockFace);
+    
+    // Clock border (frame)
+    auto clockBorder = createCuboid(
+        glm::vec3(clockRadius * 2.1f, clockRadius * 2.1f, 0.03f),
+        glm::vec3(0.2f, 0.2f, 0.2f), // Dark frame
+        glm::vec3(0.0f, 0.0f, -0.02f)
+    );
+    clockNode->AddChild(clockBorder);
+    
+    // Hour markers (12 markers)
+    for (int i = 0; i < 12; ++i)
+    {
+        float angle = i * 30.0f * 3.14159f / 180.0f; // 30 degrees each
+        float markerDist = clockRadius * 0.85f;
+        float x = std::sin(angle) * markerDist;
+        float y = std::cos(angle) * markerDist;
+        
+        bool isMainHour = (i % 3 == 0); // 12, 3, 6, 9 are bigger
+        float markerSize = isMainHour ? 0.06f : 0.04f;
+        
+        auto marker = createCuboid(
+            glm::vec3(markerSize, markerSize, 0.04f),
+            handColor,
+            glm::vec3(x, y, 0.03f)
+        );
+        clockNode->AddChild(marker);
+    }
+    
+    // Hour hand (short, thick) - as separate node for animation
+    auto hourHand = std::make_shared<SceneNode>();
+    auto hourHandMesh = createCuboid(
+        glm::vec3(0.04f, clockRadius * 0.45f, 0.04f),
+        handColor,
+        glm::vec3(0.0f, clockRadius * 0.225f, 0.0f) // Pivot at bottom
+    );
+    hourHand->AddChild(hourHandMesh);
+    hourHand->SetLocalTransform(glm::translate(glm::mat4(1.0f), 
+        glm::vec3(0.0f, 0.0f, 0.05f)));
+    clockNode->AddChild(hourHand);
+    
+    // Minute hand (longer, thinner) - as separate node for animation
+    auto minuteHand = std::make_shared<SceneNode>();
+    auto minuteHandMesh = createCuboid(
+        glm::vec3(0.03f, clockRadius * 0.7f, 0.04f),
+        handColor,
+        glm::vec3(0.0f, clockRadius * 0.35f, 0.0f) // Pivot at bottom
+    );
+    minuteHand->AddChild(minuteHandMesh);
+    minuteHand->SetLocalTransform(glm::translate(glm::mat4(1.0f), 
+        glm::vec3(0.0f, 0.0f, 0.06f)));
+    clockNode->AddChild(minuteHand);
+    
+    // Store hand references in children for animation
+    // Order: ..., hourHand, minuteHand are last 2 children (no second hand)
+    
+    return clockNode;
+}
+
+// Helper to create a simple cloud
+static SceneNode::Ptr createCloud(float size = 1.0f)
+{
+    auto cloudNode = std::make_shared<SceneNode>();
+    
+    glm::vec3 cloudColor(0.95f, 0.95f, 0.98f); // Light white/blue
+    
+    // Cloud made of multiple "puffs" (cuboids approximating spheres)
+    // Center puff (largest)
+    auto puff1 = createCuboid(
+        glm::vec3(size * 1.2f, size * 0.8f, size * 0.8f),
+        cloudColor,
+        glm::vec3(0.0f, 0.0f, 0.0f)
+    );
+    cloudNode->AddChild(puff1);
+    
+    // Left puff
+    auto puff2 = createCuboid(
+        glm::vec3(size * 0.9f, size * 0.7f, size * 0.7f),
+        cloudColor,
+        glm::vec3(-size * 0.8f, -size * 0.1f, 0.0f)
+    );
+    cloudNode->AddChild(puff2);
+    
+    // Right puff
+    auto puff3 = createCuboid(
+        glm::vec3(size * 0.9f, size * 0.7f, size * 0.7f),
+        cloudColor,
+        glm::vec3(size * 0.8f, -size * 0.1f, 0.0f)
+    );
+    cloudNode->AddChild(puff3);
+    
+    // Top puff
+    auto puff4 = createCuboid(
+        glm::vec3(size * 0.7f, size * 0.6f, size * 0.6f),
+        cloudColor,
+        glm::vec3(-size * 0.3f, size * 0.4f, 0.0f)
+    );
+    cloudNode->AddChild(puff4);
+    
+    // Top right puff
+    auto puff5 = createCuboid(
+        glm::vec3(size * 0.7f, size * 0.6f, size * 0.6f),
+        cloudColor,
+        glm::vec3(size * 0.4f, size * 0.3f, 0.0f)
+    );
+    cloudNode->AddChild(puff5);
+    
+    return cloudNode;
+}
+
+// Helper to create a simple bird (V-shape)
+static SceneNode::Ptr createBird(float size = 0.5f, const glm::vec3& color = glm::vec3(0.2f, 0.2f, 0.2f))
+{
+    auto birdNode = std::make_shared<SceneNode>();
+    
+    // Left wing
+    auto leftWing = createCuboid(
+        glm::vec3(size, size/5.0f, size/2.0f),
+        color,
+        glm::vec3(-size/2.0f, 0.0f, size/4.0f)
+    );
+    // Rotate wing slightly
+    glm::mat4 tL = leftWing->GetLocalTransform();
+    tL = glm::rotate(tL, glm::radians(15.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    tL = glm::rotate(tL, glm::radians(-30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    leftWing->SetLocalTransform(tL);
+    birdNode->AddChild(leftWing);
+    
+    // Right wing
+    auto rightWing = createCuboid(
+        glm::vec3(size, size/5.0f, size/2.0f),
+        color,
+        glm::vec3(size/2.0f, 0.0f, size/4.0f)
+    );
+     // Rotate wing slightly
+    glm::mat4 tR = rightWing->GetLocalTransform();
+    tR = glm::rotate(tR, glm::radians(-15.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    tR = glm::rotate(tR, glm::radians(30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    rightWing->SetLocalTransform(tR);
+    birdNode->AddChild(rightWing);
+    
+    // Body (small center)
+    auto body = createCuboid(
+        glm::vec3(size/3.0f, size/4.0f, size/1.5f),
+        color,
+        glm::vec3(0.0f, -size/8.0f, 0.0f)
+    );
+    birdNode->AddChild(body);
+
+    return birdNode;
+}
+
+
+// Helper to create school name sign
+static SceneNode::Ptr createSchoolSign(const std::string & schoolName = "TRUONG HOC")
+{
+    auto signNode = std::make_shared<SceneNode>();
+    
+    // Sign board (large rectangular board)
+    float signWidth = 8.0f;
+    float signHeight = 2.0f;
+    float signDepth = 0.2f;
+    
+    glm::vec3 boardColor(0.15f, 0.25f, 0.45f); // Dark blue
+    auto board = createCuboid(
+        glm::vec3(signWidth, signHeight, signDepth),
+        boardColor,
+        glm::vec3(0.0f, 0.0f, 0.0f)
+    );
+    signNode->AddChild(board);
+    
+    // Decorative border (gold/yellow frame)
+    glm::vec3 frameColor(0.9f, 0.75f, 0.2f); // Gold
+    float frameThickness = 0.15f;
+    
+    // Top frame
+    auto frameTop = createCuboid(
+        glm::vec3(signWidth, frameThickness, signDepth + 0.05f),
+        frameColor,
+        glm::vec3(0.0f, signHeight/2.0f - frameThickness/2.0f, 0.0f)
+    );
+    signNode->AddChild(frameTop);
+    
+    // Bottom frame
+    auto frameBottom = createCuboid(
+        glm::vec3(signWidth, frameThickness, signDepth + 0.05f),
+        frameColor,
+        glm::vec3(0.0f, -signHeight/2.0f + frameThickness/2.0f, 0.0f)
+    );
+    signNode->AddChild(frameBottom);
+    
+    // Left frame
+    auto frameLeft = createCuboid(
+        glm::vec3(frameThickness, signHeight, signDepth + 0.05f),
+        frameColor,
+        glm::vec3(-signWidth/2.0f + frameThickness/2.0f, 0.0f, 0.0f)
+    );
+    signNode->AddChild(frameLeft);
+    
+    // Right frame
+    auto frameRight = createCuboid(
+        glm::vec3(frameThickness, signHeight, signDepth + 0.05f),
+        frameColor,
+        glm::vec3(signWidth/2.0f - frameThickness/2.0f, 0.0f, 0.0f)
+    );
+    signNode->AddChild(frameRight);
+    
+    // Text representation (simplified as colored rectangles)
+    // We'll create simple letter-like shapes
+    glm::vec3 textColor(1.0f, 1.0f, 1.0f); // White text
+    
+    // Create simplified text blocks (representing school name)
+    int numLetters = 8;
+    float letterSpacing = (signWidth - 1.0f) / numLetters;
+    float letterWidth = 0.4f;
+    float letterHeight = 1.0f;
+    
+    for (int i = 0; i < numLetters; ++i)
+    {
+        float xPos = -signWidth/2.0f + 0.8f + i * letterSpacing;
+        
+        auto letter = createCuboid(
+            glm::vec3(letterWidth, letterHeight, 0.05f),
+            textColor,
+            glm::vec3(xPos, 0.0f, signDepth/2.0f + 0.05f)
+        );
+        signNode->AddChild(letter);
+    }
+    
+    // Support posts (two posts holding the sign)
+    glm::vec3 postColor(0.3f, 0.25f, 0.2f); // Dark brown wood
+    float postHeight = 3.0f;
+    float postRadius = 0.15f;
+    
+    // Left post
+    auto leftPost = createCuboid(
+        glm::vec3(postRadius * 2, postHeight, postRadius * 2),
+        postColor,
+        glm::vec3(-signWidth/2.0f + 0.5f, -signHeight/2.0f - postHeight/2.0f, 0.0f)
+    );
+    signNode->AddChild(leftPost);
+    
+    // Right post
+    auto rightPost = createCuboid(
+        glm::vec3(postRadius * 2, postHeight, postRadius * 2),
+        postColor,
+        glm::vec3(signWidth/2.0f - 0.5f, -signHeight/2.0f - postHeight/2.0f, 0.0f)
+    );
+    signNode->AddChild(rightPost);
+    
+    return signNode;
+}
+
+
+// Helper to create a basketball court
+static SceneNode::Ptr createBasketballCourt(float length = 28.0f, float width = 15.0f)
+{
+    auto court = std::make_shared<SceneNode>();
+    
+    // Court surface (orange/brown color typical of outdoor courts)
+    glm::vec3 courtColor(0.85f, 0.5f, 0.3f); // Orange-brown court
+    auto surface = createCuboid(
+        glm::vec3(length, 0.15f, width),
+        courtColor,
+        glm::vec3(0.0f, 0.075f, 0.0f)
+    );
+    court->AddChild(surface);
+    
+    // Line markings (white)
+    glm::vec3 lineColor(0.95f, 0.95f, 0.95f);
+    float lineThickness = 0.1f;
+    float lineHeight = 0.17f; // Slightly above surface
+    
+    // Outer boundary lines
+    // Top boundary
+    auto topLine = createCuboid(
+        glm::vec3(length, lineHeight, lineThickness),
+        lineColor,
+        glm::vec3(0.0f, lineHeight/2.0f, width/2.0f)
+    );
+    court->AddChild(topLine);
+    
+    // Bottom boundary
+    auto bottomLine = createCuboid(
+        glm::vec3(length, lineHeight, lineThickness),
+        lineColor,
+        glm::vec3(0.0f, lineHeight/2.0f, -width/2.0f)
+    );
+    court->AddChild(bottomLine);
+    
+    // Left boundary
+    auto leftLine = createCuboid(
+        glm::vec3(lineThickness, lineHeight, width),
+        lineColor,
+        glm::vec3(-length/2.0f, lineHeight/2.0f, 0.0f)
+    );
+    court->AddChild(leftLine);
+    
+    // Right boundary
+    auto rightLine = createCuboid(
+        glm::vec3(lineThickness, lineHeight, width),
+        lineColor,
+        glm::vec3(length/2.0f, lineHeight/2.0f, 0.0f)
+    );
+    court->AddChild(rightLine);
+    
+    // Center circle
+    float centerRadius = 1.8f;
+    int circleSegments = 60; // Increased for smoother circle
+    for (int i = 0; i < circleSegments; ++i)
+    {
+        float angle1 = (float)i / circleSegments * 2.0f * 3.14159f;
+        float angle2 = (float)(i + 1) / circleSegments * 2.0f * 3.14159f;
+        
+        float x1 = centerRadius * std::cos(angle1);
+        float z1 = centerRadius * std::sin(angle1);
+        float x2 = centerRadius * std::cos(angle2);
+        float z2 = centerRadius * std::sin(angle2);
+        
+        float segLength = std::sqrt((x2-x1)*(x2-x1) + (z2-z1)*(z2-z1));
+        float segAngle = std::atan2(z2-z1, x2-x1);
+        
+        auto segment = std::make_shared<MeshNode>(MeshType::Cube);
+        segment->material.albedo = lineColor;
+        
+        glm::mat4 t(1.0f);
+        t = glm::translate(t, glm::vec3((x1+x2)/2.0f, lineHeight/2.0f, (z1+z2)/2.0f));
+        t = glm::rotate(t, segAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+        t = glm::scale(t, glm::vec3(segLength, lineHeight, lineThickness));
+        segment->SetLocalTransform(t);
+        
+        court->AddChild(segment);
+    }
+    
+    // Free throw lanes and key areas (paint) for both ends
+    float keyWidth = 3.6f;  // Width of the key/lane
+    float keyLength = 5.8f; // Length from baseline to free throw line
+    
+    for (int side = 0; side < 2; ++side)
+    {
+        float xCenter = (side == 0) ? -length/2.0f : length/2.0f;
+        float xOffset = (side == 0) ? keyLength/2.0f : -keyLength/2.0f;
+        
+        // Free throw lane - front line
+        auto ftFront = createCuboid(
+            glm::vec3(lineThickness, lineHeight, keyWidth),
+            lineColor,
+            glm::vec3(xCenter + xOffset, lineHeight/2.0f, 0.0f)
+        );
+        court->AddChild(ftFront);
+        
+        // Free throw lane - left side
+        auto ftLeft = createCuboid(
+            glm::vec3(keyLength, lineHeight, lineThickness),
+            lineColor,
+            glm::vec3(xCenter + xOffset/2.0f, lineHeight/2.0f, keyWidth/2.0f)
+        );
+        court->AddChild(ftLeft);
+        
+        // Free throw lane - right side
+        auto ftRight = createCuboid(
+            glm::vec3(keyLength, lineHeight, lineThickness),
+            lineColor,
+            glm::vec3(xCenter + xOffset/2.0f, lineHeight/2.0f, -keyWidth/2.0f)
+        );
+        court->AddChild(ftRight);
+        
+        // Free throw circle (top of key) - semicircle only
+        float ftCircleRadius = 1.8f;
+        for (int i = 0; i < circleSegments/2; ++i)
+        {
+            // Draw semicircle from -90 to +90 degrees
+            float angle1 = -3.14159f/2.0f + (float)i / (circleSegments/2) * 3.14159f;
+            float angle2 = -3.14159f/2.0f + (float)(i + 1) / (circleSegments/2) * 3.14159f;
+            
+            float z1 = ftCircleRadius * std::sin(angle1);
+            float z2 = ftCircleRadius * std::sin(angle2);
+            float x1 = ftCircleRadius * std::cos(angle1) * (side == 0 ? 1.0f : -1.0f);
+            float x2 = ftCircleRadius * std::cos(angle2) * (side == 0 ? 1.0f : -1.0f);
+            
+            float segLength = std::sqrt((x2-x1)*(x2-x1) + (z2-z1)*(z2-z1));
+            float segAngle = std::atan2(z2-z1, x2-x1);
+            
+            auto segment = std::make_shared<MeshNode>(MeshType::Cube);
+            segment->material.albedo = lineColor;
+            
+            glm::mat4 t(1.0f);
+            t = glm::translate(t, glm::vec3(xCenter + xOffset + (x1+x2)/2.0f, lineHeight/2.0f, (z1+z2)/2.0f));
+            t = glm::rotate(t, segAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+            t = glm::scale(t, glm::vec3(segLength, lineHeight, lineThickness));
+            segment->SetLocalTransform(t);
+            
+            court->AddChild(segment);
+        }
+    }
+    
+    // Three-point arcs (more detailed)
+    float threePointRadius = 6.75f;
+    int arcSegments = 80; // Increased for smoother, continuous arc
+    
+    for (int side = 0; side < 2; ++side)
+    {
+        float xCenter = (side == 0) ? -length/2.0f : length/2.0f;
+        
+        for (int i = 0; i < arcSegments; ++i)
+        {
+            // Arc from -90 to +90 degrees (semicircle facing the basket)
+            float angle1 = -3.14159f/2.0f + (float)i / arcSegments * 3.14159f;
+            float angle2 = -3.14159f/2.0f + (float)(i + 1) / arcSegments * 3.14159f;
+            
+            float z1 = threePointRadius * std::sin(angle1);
+            float z2 = threePointRadius * std::sin(angle2);
+            float x1 = threePointRadius * std::cos(angle1) * (side == 0 ? 1.0f : -1.0f);
+            float x2 = threePointRadius * std::cos(angle2) * (side == 0 ? 1.0f : -1.0f);
+            
+            if (std::abs(z1) <= width/2.0f && std::abs(z2) <= width/2.0f)
+            {
+                float segLength = std::sqrt((x2-x1)*(x2-x1) + (z2-z1)*(z2-z1));
+                float segAngle = std::atan2(z2-z1, x2-x1);
+                
+                auto segment = std::make_shared<MeshNode>(MeshType::Cube);
+                segment->material.albedo = lineColor;
+                
+                glm::mat4 t(1.0f);
+                t = glm::translate(t, glm::vec3(xCenter + (x1+x2)/2.0f, lineHeight/2.0f, (z1+z2)/2.0f));
+                t = glm::rotate(t, segAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+                t = glm::scale(t, glm::vec3(segLength, lineHeight, lineThickness));
+                segment->SetLocalTransform(t);
+                
+                court->AddChild(segment);
+            }
+        }
+    }
+    
+    // Basketball hoops (2 hoops at each end)
+    glm::vec3 poleColor(0.3f, 0.3f, 0.35f); // Dark grey metal
+    glm::vec3 backboardColor(0.95f, 0.95f, 0.97f); // White/transparent
+    glm::vec3 rimColor(0.9f, 0.4f, 0.1f); // Orange rim
+    glm::vec3 netColor(0.9f, 0.9f, 0.95f); // White net
+    
+    float hoopHeight = 3.05f; // Standard 10 feet
+    float poleRadius = 0.1f;
+    float backboardWidth = 1.8f;
+    float backboardHeight = 1.05f;
+    float backboardThickness = 0.05f;
+    
+    for (int side = 0; side < 2; ++side)
+    {
+        float xPos = (side == 0) ? -length/2.0f - 1.0f : length/2.0f + 1.0f;
+        
+        // Pole
+        auto pole = createCuboid(
+            glm::vec3(poleRadius * 2, hoopHeight + 0.5f, poleRadius * 2),
+            poleColor,
+            glm::vec3(xPos, (hoopHeight + 0.5f)/2.0f, 0.0f)
+        );
+        court->AddChild(pole);
+        
+        // Backboard
+        auto backboard = createCuboid(
+            glm::vec3(backboardThickness, backboardHeight, backboardWidth),
+            backboardColor,
+            glm::vec3(xPos + (side == 0 ? 0.5f : -0.5f), hoopHeight, 0.0f)
+        );
+        court->AddChild(backboard);
+        
+        // Backboard frame (red/orange outline)
+        glm::vec3 frameColor(0.8f, 0.2f, 0.1f);
+        float frameThick = 0.06f;
+        
+        // Top frame
+        auto frameTop = createCuboid(
+            glm::vec3(frameThick, frameThick, backboardWidth),
+            frameColor,
+            glm::vec3(xPos + (side == 0 ? 0.5f : -0.5f), hoopHeight + backboardHeight/2.0f, 0.0f)
+        );
+        court->AddChild(frameTop);
+        
+        // Bottom frame
+        auto frameBottom = createCuboid(
+            glm::vec3(frameThick, frameThick, backboardWidth),
+            frameColor,
+            glm::vec3(xPos + (side == 0 ? 0.5f : -0.5f), hoopHeight - backboardHeight/2.0f, 0.0f)
+        );
+        court->AddChild(frameBottom);
+        
+        // Rim (horizontal circle in X-Z plane)
+        float rimRadius = 0.45f;
+        int rimSegments = 40; // Increased for smoother rim
+        for (int i = 0; i < rimSegments; ++i)
+        {
+            float angle1 = (float)i / rimSegments * 2.0f * 3.14159f;
+            float angle2 = (float)(i + 1) / rimSegments * 2.0f * 3.14159f;
+            
+            // Create circle in X-Z plane (horizontal)
+            float x1 = rimRadius * std::cos(angle1);
+            float z1 = rimRadius * std::sin(angle1);
+            float x2 = rimRadius * std::cos(angle2);
+            float z2 = rimRadius * std::sin(angle2);
+            
+            float segLength = std::sqrt((x2-x1)*(x2-x1) + (z2-z1)*(z2-z1));
+            float segAngle = std::atan2(z2-z1, x2-x1);
+            
+            auto segment = std::make_shared<MeshNode>(MeshType::Cube);
+            segment->material.albedo = rimColor;
+            
+            glm::mat4 t(1.0f);
+            t = glm::translate(t, glm::vec3(xPos + (side == 0 ? 0.9f : -0.9f) + (x1+x2)/2.0f, hoopHeight - 0.5f, (z1+z2)/2.0f));
+            t = glm::rotate(t, segAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+            t = glm::scale(t, glm::vec3(segLength, 0.05f, 0.05f));
+            segment->SetLocalTransform(t);
+            
+            court->AddChild(segment);
+        }
+        
+        // Rim support bracket
+        auto rimSupport = createCuboid(
+            glm::vec3(0.4f, 0.05f, 0.05f),
+            poleColor,
+            glm::vec3(xPos + (side == 0 ? 0.7f : -0.7f), hoopHeight - 0.5f, 0.0f)
+        );
+        court->AddChild(rimSupport);
+        
+        // Net (simplified as vertical strips)
+        float netHeight = 0.4f;
+        int netStrips = 12;
+        for (int i = 0; i < netStrips; ++i)
+        {
+            float angle = (float)i / netStrips * 2.0f * 3.14159f;
+            float netX = rimRadius * 0.8f * std::cos(angle);
+            float netZ = rimRadius * 0.8f * std::sin(angle);
+            
+            auto netStrip = createCuboid(
+                glm::vec3(0.02f, netHeight, 0.02f),
+                netColor,
+                glm::vec3(xPos + (side == 0 ? 0.9f : -0.9f) + netX * 0.3f, hoopHeight - 0.5f - netHeight/2.0f, netZ)
+            );
+            court->AddChild(netStrip);
+        }
+    }
+    
+    return court;
+}
+
+
+// Helper to create a football (soccer) field
+static SceneNode::Ptr createFootballField(float length = 40.0f, float width = 25.0f)
+{
+    auto field = std::make_shared<SceneNode>();
+    
+    // Field surface (grass green)
+    glm::vec3 grassColor(0.25f, 0.55f, 0.25f); // Vibrant grass green
+    auto surface = createCuboid(
+        glm::vec3(length, 0.15f, width),
+        grassColor,
+        glm::vec3(0.0f, 0.075f, 0.0f)
+    );
+    field->AddChild(surface);
+    
+    // Line markings (white)
+    glm::vec3 lineColor(0.95f, 0.95f, 0.95f);
+    float lineThickness = 0.12f;
+    float lineHeight = 0.22f; // Increased height to prevent z-fighting
+    
+    // Outer boundary lines
+    // Top sideline
+    auto topLine = createCuboid(
+        glm::vec3(length, lineHeight, lineThickness),
+        lineColor,
+        glm::vec3(0.0f, lineHeight/2.0f, width/2.0f)
+    );
+    field->AddChild(topLine);
+    
+    // Bottom sideline
+    auto bottomLine = createCuboid(
+        glm::vec3(length, lineHeight, lineThickness),
+        lineColor,
+        glm::vec3(0.0f, lineHeight/2.0f, -width/2.0f)
+    );
+    field->AddChild(bottomLine);
+    
+    // Left goal line
+    auto leftLine = createCuboid(
+        glm::vec3(lineThickness, lineHeight, width),
+        lineColor,
+        glm::vec3(-length/2.0f, lineHeight/2.0f, 0.0f)
+    );
+    field->AddChild(leftLine);
+    
+    // Right goal line
+    auto rightLine = createCuboid(
+        glm::vec3(lineThickness, lineHeight, width),
+        lineColor,
+        glm::vec3(length/2.0f, lineHeight/2.0f, 0.0f)
+    );
+    field->AddChild(rightLine);
+    
+    // Center line
+    auto centerLine = createCuboid(
+        glm::vec3(lineThickness, lineHeight, width),
+        lineColor,
+        glm::vec3(0.0f, lineHeight/2.0f, 0.0f)
+    );
+    field->AddChild(centerLine);
+    
+    // Center circle
+    float centerRadius = 4.5f;
+    int circleSegments = 80; // High segment count for smooth circle
+    for (int i = 0; i < circleSegments; ++i)
+    {
+        float angle1 = (float)i / circleSegments * 2.0f * 3.14159f;
+        float angle2 = (float)(i + 1) / circleSegments * 2.0f * 3.14159f;
+        
+        float x1 = centerRadius * std::cos(angle1);
+        float z1 = centerRadius * std::sin(angle1);
+        float x2 = centerRadius * std::cos(angle2);
+        float z2 = centerRadius * std::sin(angle2);
+        
+        float segLength = std::sqrt((x2-x1)*(x2-x1) + (z2-z1)*(z2-z1));
+        float segAngle = std::atan2(z2-z1, x2-x1);
+        
+        auto segment = std::make_shared<MeshNode>(MeshType::Cube);
+        segment->material.albedo = lineColor;
+        
+        glm::mat4 t(1.0f);
+        t = glm::translate(t, glm::vec3((x1+x2)/2.0f, lineHeight/2.0f, (z1+z2)/2.0f));
+        t = glm::rotate(t, segAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+        t = glm::scale(t, glm::vec3(segLength * 1.08f, lineHeight, lineThickness)); // Add overlap to close gaps
+        segment->SetLocalTransform(t);
+        
+        field->AddChild(segment);
+    }
+    
+    // Penalty areas (simplified - just the arc at each end)
+    float penaltyArcRadius = 5.5f;
+    int penaltySegments = 50; // Smoother arc
+    
+    for (int side = 0; side < 2; ++side)
+    {
+        float xCenter = (side == 0) ? -length/2.0f : length/2.0f;
+        
+        // Draw penalty arc (semicircle facing away from goal)
+        for (int i = 0; i < penaltySegments/2; ++i)
+        {
+            float angle1 = -3.14159f/2.0f + (float)i / (penaltySegments/2) * 3.14159f;
+            float angle2 = -3.14159f/2.0f + (float)(i + 1) / (penaltySegments/2) * 3.14159f;
+            
+            float z1 = penaltyArcRadius * std::sin(angle1);
+            float z2 = penaltyArcRadius * std::sin(angle2);
+            float x1 = penaltyArcRadius * std::cos(angle1) * (side == 0 ? 1.0f : -1.0f);
+            float x2 = penaltyArcRadius * std::cos(angle2) * (side == 0 ? 1.0f : -1.0f);
+            
+            if (std::abs(z1) <= width/2.0f && std::abs(z2) <= width/2.0f)
+            {
+                float segLength = std::sqrt((x2-x1)*(x2-x1) + (z2-z1)*(z2-z1));
+                float segAngle = std::atan2(z2-z1, x2-x1);
+                
+                auto segment = std::make_shared<MeshNode>(MeshType::Cube);
+                segment->material.albedo = lineColor;
+                
+                glm::mat4 t(1.0f);
+                t = glm::translate(t, glm::vec3(xCenter + (x1+x2)/2.0f, lineHeight/2.0f, (z1+z2)/2.0f));
+                t = glm::rotate(t, segAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+                t = glm::scale(t, glm::vec3(segLength * 1.08f, lineHeight, lineThickness)); // Add overlap
+                segment->SetLocalTransform(t);
+                
+                field->AddChild(segment);
+            }
+        }
+    }
+    
+    // Goal posts (2 goals at each end)
+    glm::vec3 goalColor(0.95f, 0.95f, 0.95f); // White
+    glm::vec3 netColor(0.8f, 0.8f, 0.85f); // Light grey net
+    
+    float goalWidth = 7.32f;
+    float goalHeight = 2.44f;
+    float goalDepth = 2.0f;
+    float postRadius = 0.12f;
+    
+    for (int side = 0; side < 2; ++side)
+    {
+        float xPos = (side == 0) ? -length/2.0f - 0.1f : length/2.0f + 0.1f;
+        
+        // Left post
+        auto leftPost = createCuboid(
+            glm::vec3(postRadius, goalHeight, postRadius),
+            goalColor,
+            glm::vec3(xPos, goalHeight/2.0f, -goalWidth/2.0f)
+        );
+        field->AddChild(leftPost);
+        
+        // Right post
+        auto rightPost = createCuboid(
+            glm::vec3(postRadius, goalHeight, postRadius),
+            goalColor,
+            glm::vec3(xPos, goalHeight/2.0f, goalWidth/2.0f)
+        );
+        field->AddChild(rightPost);
+        
+        // Crossbar
+        auto crossbar = createCuboid(
+            glm::vec3(postRadius, postRadius, goalWidth),
+            goalColor,
+            glm::vec3(xPos, goalHeight, 0.0f)
+        );
+        field->AddChild(crossbar);
+        
+        // Net (simplified as semi-transparent panels)
+        // Back net
+        auto backNet = createCuboid(
+            glm::vec3(0.05f, goalHeight, goalWidth),
+            netColor,
+            glm::vec3(xPos + (side == 0 ? -goalDepth : goalDepth), goalHeight/2.0f, 0.0f)
+        );
+        field->AddChild(backNet);
+        
+        // Side nets
+        auto leftNet = createCuboid(
+            glm::vec3(goalDepth, goalHeight, 0.05f),
+            netColor,
+            glm::vec3(xPos + (side == 0 ? -goalDepth/2.0f : goalDepth/2.0f), goalHeight/2.0f, -goalWidth/2.0f)
+        );
+        field->AddChild(leftNet);
+        
+        auto rightNet = createCuboid(
+            glm::vec3(goalDepth, goalHeight, 0.05f),
+            netColor,
+            glm::vec3(xPos + (side == 0 ? -goalDepth/2.0f : goalDepth/2.0f), goalHeight/2.0f, goalWidth/2.0f)
+        );
+        field->AddChild(rightNet);
+        
+        // Top net
+        auto topNet = createCuboid(
+            glm::vec3(goalDepth, 0.05f, goalWidth),
+            netColor,
+            glm::vec3(xPos + (side == 0 ? -goalDepth/2.0f : goalDepth/2.0f), goalHeight, 0.0f)
+        );
+        field->AddChild(topNet);
+    }
+    
+    return field;
+}
 
 // Helper to create a straight staircase
 // height: total height to climb
@@ -1162,8 +2237,8 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
     {
         auto gate = createParabolicArchGate(12.0f, 8.0f); // Wider and taller arch
         // Position gate at the front wall opening
-        // Perimeter wall is at Z=-5, with depth 50, so front is at Z = -5 + 50/2 = 20
-        gate->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 20.0f)));
+        // Perimeter wall is at Z=-5, with depth 70, so front is at Z = -5 + 70/2 = 30
+        gate->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 30.0f)));
         schoolParams->AddChild(gate);
     }
     
@@ -1181,9 +2256,9 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
     // -- Perimeter Wall/Fence System --
     {
         // Define the rectangular boundary of the school grounds
-        // The school extends roughly from -20 to +20 in X, and -25 to +15 in Z
-        float perimeterWidth = 50.0f;  // Total width (X direction)
-        float perimeterDepth = 50.0f;  // Total depth (Z direction)
+        // Expanded to accommodate sports courts
+        float perimeterWidth = 80.0f;  // Total width (X direction) - expanded for sports courts
+        float perimeterDepth = 70.0f;  // Total depth (Z direction) - expanded for sports courts
         
         auto perimeter = createPerimeterWall(perimeterWidth, perimeterDepth);
         // Center the perimeter around the school (shift back slightly)
@@ -1212,6 +2287,33 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
             streetlightR->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, z)));
             schoolParams->AddChild(streetlightR);
         }
+    }
+    
+    // -- Sports Courts --
+    {
+        // Basketball Court (positioned on the left side, oriented vertically along Z axis)
+        auto basketballCourt = createBasketballCourt(20.0f, 12.0f); // Smaller court for school
+        glm::mat4 bballTransform = glm::mat4(1.0f);
+        bballTransform = glm::translate(bballTransform, glm::vec3(-28.0f, 0.0f, -18.0f));
+        bballTransform = glm::rotate(bballTransform, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate to be vertical
+        basketballCourt->SetLocalTransform(bballTransform);
+        schoolParams->AddChild(basketballCourt);
+        
+        // Football Field (positioned on the right side, oriented vertically along Z axis)
+        auto footballField = createFootballField(30.0f, 20.0f); // Mini football field
+        glm::mat4 footballTransform = glm::mat4(1.0f);
+        footballTransform = glm::translate(footballTransform, glm::vec3(28.0f, 0.0f, -20.0f));
+        footballTransform = glm::rotate(footballTransform, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate to be vertical
+        footballField->SetLocalTransform(footballTransform);
+        schoolParams->AddChild(footballField);
+    }
+    
+    // -- Flagpole (in front courtyard) --
+    {
+        auto flagpole = createFlagpole(10.0f); // 10m tall flagpole
+        // Position in the courtyard, slightly to the left of the pathway
+        flagpole->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-6.0f, 0.0f, 12.0f)));
+        schoolParams->AddChild(flagpole);
     }
 
 
@@ -1266,6 +2368,546 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
         rightStair->SetLocalTransform(t);
         schoolParams->AddChild(rightStair);
     }
+    
+    // -- Stone Benches Along Pathways --
+    {
+        // Bench 1: Left pathway
+        auto bench1 = createStoneBench();
+        glm::mat4 t1 = glm::translate(glm::mat4(1.0f), glm::vec3(-8.0f, 0.0f, 8.0f));
+        t1 = glm::rotate(t1, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Face pathway
+        bench1->SetLocalTransform(t1);
+        schoolParams->AddChild(bench1);
+        
+        // Bench 2: Right pathway
+        auto bench2 = createStoneBench();
+        glm::mat4 t2 = glm::translate(glm::mat4(1.0f), glm::vec3(8.0f, 0.0f, 8.0f));
+        t2 = glm::rotate(t2, glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Face pathway
+        bench2->SetLocalTransform(t2);
+        schoolParams->AddChild(bench2);
+        
+        // Bench 3: Near gate left
+        auto bench3 = createStoneBench();
+        glm::mat4 t3 = glm::translate(glm::mat4(1.0f), glm::vec3(-4.0f, 0.0f, 18.0f));
+        t3 = glm::rotate(t3, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Face inward
+        bench3->SetLocalTransform(t3);
+        schoolParams->AddChild(bench3);
+        
+        // Bench 4: Near gate right
+        auto bench4 = createStoneBench();
+        glm::mat4 t4 = glm::translate(glm::mat4(1.0f), glm::vec3(4.0f, 0.0f, 18.0f));
+        t4 = glm::rotate(t4, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Face inward
+        bench4->SetLocalTransform(t4);
+        schoolParams->AddChild(bench4);
+    }
+    
+    // -- Picnic Tables Under Trees --
+    {
+        // Table 1: Left side (near basketball court)
+        auto table1 = createPicnicTable();
+        table1->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-15.0f, 0.0f, 5.0f)));
+        schoolParams->AddChild(table1);
+        
+        // Table 2: Right side (near football field)
+        auto table2 = createPicnicTable();
+        table2->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(15.0f, 0.0f, 5.0f)));
+        schoolParams->AddChild(table2);
+    }
+    
+    // -- Streetlights Around School --
+    {
+        float lightHeight = 4.0f;
+        
+        // Left side lights (outside basketball court)
+        auto light3 = createStreetlight(lightHeight);
+        light3->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-32.0f, 0.0f, 0.0f)));
+        schoolParams->AddChild(light3);
+        
+        auto light4 = createStreetlight(lightHeight);
+        light4->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-39.0f, 0.0f, -15.0f)));
+        schoolParams->AddChild(light4);
+        
+        // Right side lights (outside football field)
+        auto light5 = createStreetlight(lightHeight);
+        light5->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(32.0f, 0.0f, 0.0f)));
+        schoolParams->AddChild(light5);
+        
+        auto light6 = createStreetlight(lightHeight);
+        light6->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(39.0f, 0.0f, -15.0f)));
+        schoolParams->AddChild(light6);
+        
+        // Back area lights (behind building)
+        auto light7 = createStreetlight(lightHeight);
+        light7->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-15.0f, 0.0f, -20.0f)));
+        schoolParams->AddChild(light7);
+        
+        auto light8 = createStreetlight(lightHeight);
+        light8->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(15.0f, 0.0f, -20.0f)));
+        schoolParams->AddChild(light8);
+    }
+    
+    // -- Wall Clock (mounted on center building) --
+    {
+        auto clock = createClock();
+        // Mount on front wall of center building
+        // Center building is at Z around -10, front face at Z=-5
+        // Mount at 3.5m height on the wall
+        glm::mat4 clockTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 6.0f, -6.95f));
+        // No rotation needed - clock faces forward naturally
+        clock->SetLocalTransform(clockTransform);
+        schoolParams->AddChild(clock);
+        // Store clock reference for animation
+        s_clock = clock;
+    }
+    
+    // -- People Walking Around --
+    {
+        // Clear previous people (if any)
+        s_people.clear();
+        
+        // Person 1: Walking on left pathway (blue shirt)
+        auto person1 = createPerson(glm::vec3(0.2f, 0.4f, 0.8f)); // Blue
+        glm::mat4 t1 = glm::translate(glm::mat4(1.0f), glm::vec3(-5.0f, 0.0f, 10.0f));
+        t1 = glm::rotate(t1, glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        person1->SetLocalTransform(t1);
+        schoolParams->AddChild(person1);
+        s_people.push_back(person1);
+        
+        // Person 2: Walking on right pathway (red shirt)
+        auto person2 = createPerson(glm::vec3(0.8f, 0.2f, 0.2f)); // Red
+        glm::mat4 t2 = glm::translate(glm::mat4(1.0f), glm::vec3(6.0f, 0.0f, 12.0f));
+        t2 = glm::rotate(t2, glm::radians(-120.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        person2->SetLocalTransform(t2);
+        schoolParams->AddChild(person2);
+        s_people.push_back(person2);
+        
+        // Person 3: Near basketball court (green shirt)
+        auto person3 = createPerson(glm::vec3(0.2f, 0.7f, 0.3f)); // Green
+        glm::mat4 t3 = glm::translate(glm::mat4(1.0f), glm::vec3(-20.0f, 0.0f, -10.0f));
+        t3 = glm::rotate(t3, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        person3->SetLocalTransform(t3);
+        schoolParams->AddChild(person3);
+        s_people.push_back(person3);
+        
+        // Person 4: Near football field (yellow shirt)
+        auto person4 = createPerson(glm::vec3(0.9f, 0.8f, 0.2f)); // Yellow
+        glm::mat4 t4 = glm::translate(glm::mat4(1.0f), glm::vec3(22.0f, 0.0f, -8.0f));
+        t4 = glm::rotate(t4, glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        person4->SetLocalTransform(t4);
+        schoolParams->AddChild(person4);
+        s_people.push_back(person4);
+        
+        // Person 5: Sitting at picnic table (purple shirt)
+        auto person5 = createPerson(glm::vec3(0.6f, 0.3f, 0.7f)); // Purple
+        glm::mat4 t5 = glm::translate(glm::mat4(1.0f), glm::vec3(-15.0f, 0.0f, 5.8f));
+        t5 = glm::rotate(t5, glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        person5->SetLocalTransform(t5);
+        schoolParams->AddChild(person5);
+        s_people.push_back(person5);
+        
+        // Person 6: Near entrance (orange shirt)
+        auto person6 = createPerson(glm::vec3(0.9f, 0.5f, 0.1f)); // Orange
+        glm::mat4 t6 = glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 20.0f));
+        t6 = glm::rotate(t6, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        person6->SetLocalTransform(t6);
+        schoolParams->AddChild(person6);
+        s_people.push_back(person6);
+    }
+    
+    // -- Clouds in the Sky --
+    {
+        // Cloud 1 (very high, very large) - Directly overhead
+        auto cloud1 = createCloud(12.0f);
+        cloud1->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-50.0f, 45.0f, 10.0f)));
+        schoolParams->AddChild(cloud1);
+        s_clouds.push_back(cloud1);
+        
+        // Cloud 2 (high, large) - Overhead right
+        auto cloud2 = createCloud(9.6f);
+        cloud2->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(40.0f, 38.0f, 5.0f)));
+        schoolParams->AddChild(cloud2);
+        s_clouds.push_back(cloud2);
+        
+        // Cloud 3 (very high, medium) - Overhead left
+        auto cloud3 = createCloud(6.0f);
+        cloud3->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-60.0f, 50.0f, -5.0f)));
+        schoolParams->AddChild(cloud3);
+        s_clouds.push_back(cloud3);
+        
+        // Cloud 4 (high, very large) - Far right, back
+        auto cloud4 = createCloud(11.4f);
+        cloud4->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(55.0f, 42.0f, -40.0f)));
+        schoolParams->AddChild(cloud4);
+        s_clouds.push_back(cloud4);
+        
+        // Cloud 5 (medium high, large) - Center overhead
+        auto cloud5 = createCloud(8.4f);
+        cloud5->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 35.0f, 15.0f)));
+        schoolParams->AddChild(cloud5);
+        s_clouds.push_back(cloud5);
+        
+        // Cloud 6 (high, large) - Left center, slightly back
+        auto cloud6 = createCloud(9.0f);
+        cloud6->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-30.0f, 40.0f, -20.0f)));
+        schoolParams->AddChild(cloud6);
+        s_clouds.push_back(cloud6);
+        
+        // Cloud 7 (very high, medium) - Far right, very far
+        auto cloud7 = createCloud(5.4f);
+        cloud7->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(65.0f, 48.0f, -80.0f)));
+        schoolParams->AddChild(cloud7);
+        s_clouds.push_back(cloud7);
+        
+        // Cloud 8 (medium high, medium) - Far left, overhead
+        auto cloud8 = createCloud(6.6f);
+        cloud8->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-70.0f, 33.0f, 0.0f)));
+        schoolParams->AddChild(cloud8);
+        s_clouds.push_back(cloud8);
+        
+        // Cloud 9 (high, very large) - Right center, back
+        auto cloud9 = createCloud(10.5f);
+        cloud9->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(25.0f, 44.0f, -30.0f)));
+        schoolParams->AddChild(cloud9);
+        s_clouds.push_back(cloud9);
+        
+        // Cloud 10 (very high, small) - Center left, far
+        auto cloud10 = createCloud(4.5f);
+        cloud10->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-15.0f, 52.0f, -60.0f)));
+        schoolParams->AddChild(cloud10);
+        s_clouds.push_back(cloud10);
+        
+        // Cloud 11 (medium high, very large) - Right, overhead
+        auto cloud11 = createCloud(10.8f);
+        cloud11->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(45.0f, 36.0f, 8.0f)));
+        schoolParams->AddChild(cloud11);
+        s_clouds.push_back(cloud11);
+        
+        // Cloud 12 (high, large) - Left, back
+        auto cloud12 = createCloud(7.5f);
+        cloud12->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-45.0f, 46.0f, -50.0f)));
+        schoolParams->AddChild(cloud12);
+        s_clouds.push_back(cloud12);
+    }
+    
+    // -- Birds in the Sky --
+    {
+        // Flock 1 (Left side)
+        for(int i=0; i<3; ++i) {
+             auto bird = createBird(0.8f);
+             float offsetX = i * 2.0f;
+             float offsetZ = i * 1.5f;
+             bird->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-20.0f + offsetX, 30.0f, -10.0f - offsetZ)));
+             schoolParams->AddChild(bird);
+             s_birds.push_back(bird);
+        }
+        
+        // Flock 2 (Right side)
+        for(int i=0; i<4; ++i) {
+             auto bird = createBird(0.7f);
+             float offsetX = i * 2.5f;
+             float offsetY = (i%2) * 1.0f;
+             bird->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(15.0f + offsetX, 35.0f + offsetY, -20.0f)));
+             schoolParams->AddChild(bird);
+             s_birds.push_back(bird);
+        }
+    }
 
     return root;
+}
+
+// Static vector to store people for animation
+std::vector<SceneNode::Ptr> SchoolBuilder::s_people;
+
+// Static clock for animation
+SceneNode::Ptr SchoolBuilder::s_clock;
+
+// Static clouds for animation
+std::vector<SceneNode::Ptr> SchoolBuilder::s_clouds;
+
+// Update people animation
+void SchoolBuilder::updatePeopleAnimation(SceneNode::Ptr root, float time)
+{
+    if (s_people.empty()) return;
+    
+    // Helper to animate limbs (arms and legs swing)
+    auto animateLimbs = [](SceneNode::Ptr person, float walkCycle) {
+        if (person->children.size() < 7) return; // Need all limbs
+        
+        // Walking cycle animation
+        float armSwing = std::sin(walkCycle * 2.0f) * 30.0f; // Arms swing opposite to legs
+        float legSwing = std::sin(walkCycle * 2.0f) * 25.0f; // Legs swing
+        
+        // Get limb nodes: 3=leftArm, 4=rightArm, 5=leftLeg, 6=rightLeg
+        auto leftArm = person->children[3];
+        auto rightArm = person->children[4];
+        auto leftLeg = person->children[5];
+        auto rightLeg = person->children[6];
+        
+        // Animate arms (swing forward/back around X axis)
+        if (leftArm) {
+            glm::mat4 t = leftArm->GetLocalTransform();
+            // Extract translation
+            glm::vec3 pos = glm::vec3(t[3]);
+            // Apply rotation around shoulder
+            t = glm::translate(glm::mat4(1.0f), pos);
+            t = glm::rotate(t, glm::radians(armSwing), glm::vec3(1.0f, 0.0f, 0.0f));
+            leftArm->SetLocalTransform(t);
+        }
+        
+        if (rightArm) {
+            glm::mat4 t = rightArm->GetLocalTransform();
+            glm::vec3 pos = glm::vec3(t[3]);
+            t = glm::translate(glm::mat4(1.0f), pos);
+            t = glm::rotate(t, glm::radians(-armSwing), glm::vec3(1.0f, 0.0f, 0.0f));
+            rightArm->SetLocalTransform(t);
+        }
+        
+        // Animate legs (swing forward/back around X axis)
+        if (leftLeg) {
+            glm::mat4 t = leftLeg->GetLocalTransform();
+            glm::vec3 pos = glm::vec3(t[3]);
+            t = glm::translate(glm::mat4(1.0f), pos);
+            t = glm::rotate(t, glm::radians(-legSwing), glm::vec3(1.0f, 0.0f, 0.0f));
+            leftLeg->SetLocalTransform(t);
+        }
+        
+        if (rightLeg) {
+            glm::mat4 t = rightLeg->GetLocalTransform();
+            glm::vec3 pos = glm::vec3(t[3]);
+            t = glm::translate(glm::mat4(1.0f), pos);
+            t = glm::rotate(t, glm::radians(legSwing), glm::vec3(1.0f, 0.0f, 0.0f));
+            rightLeg->SetLocalTransform(t);
+        }
+    };
+    
+    // Person 1: Walk back and forth on left pathway (X direction)
+    if (s_people.size() > 0)
+    {
+        float walkSpeed = 0.5f;
+        float x = -5.0f + std::sin(time * walkSpeed) * 3.0f;
+        float angle = (std::sin(time * walkSpeed) > 0) ? 45.0f : -135.0f;
+        glm::mat4 t = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, 10.0f));
+        t = glm::rotate(t, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
+        s_people[0]->SetLocalTransform(t);
+        animateLimbs(s_people[0], time * walkSpeed);
+    }
+    
+    // Person 2: Walk back and forth on right pathway (Z direction)
+    if (s_people.size() > 1)
+    {
+        float walkSpeed = 0.6f;
+        float z = 12.0f + std::sin(time * walkSpeed) * 4.0f;
+        float angle = (std::sin(time * walkSpeed) > 0) ? 0.0f : 180.0f;
+        glm::mat4 t = glm::translate(glm::mat4(1.0f), glm::vec3(6.0f, 0.0f, z));
+        t = glm::rotate(t, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
+        s_people[1]->SetLocalTransform(t);
+        animateLimbs(s_people[1], time * walkSpeed);
+    }
+    
+    // Person 3: Walk around basketball court (circular path)
+    if (s_people.size() > 2)
+    {
+        float walkSpeed = 0.4f;
+        float radius = 3.0f;
+        float x = -20.0f + std::cos(time * walkSpeed) * radius;
+        float z = -10.0f + std::sin(time * walkSpeed) * radius;
+        float angle = time * walkSpeed * 180.0f / 3.14159f + 90.0f;
+        glm::mat4 t = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, z));
+        t = glm::rotate(t, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
+        s_people[2]->SetLocalTransform(t);
+        animateLimbs(s_people[2], time * walkSpeed);
+    }
+    
+    // Person 4: Walk back and forth near football field
+    if (s_people.size() > 3)
+    {
+        float walkSpeed = 0.55f;
+        float z = -8.0f + std::sin(time * walkSpeed) * 5.0f;
+        float angle = (std::sin(time * walkSpeed) > 0) ? 0.0f : 180.0f;
+        glm::mat4 t = glm::translate(glm::mat4(1.0f), glm::vec3(22.0f, 0.0f, z));
+        t = glm::rotate(t, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
+        s_people[3]->SetLocalTransform(t);
+        animateLimbs(s_people[3], time * walkSpeed);
+    }
+    
+    // Person 5: Stay at picnic table (no movement, no animation)
+    
+    // Person 6: Walk near entrance (X direction)
+    if (s_people.size() > 5)
+    {
+        float walkSpeed = 0.45f;
+        float x = 2.0f + std::sin(time * walkSpeed) * 4.0f;
+        float angle = (std::sin(time * walkSpeed) > 0) ? 90.0f : -90.0f;
+        glm::mat4 t = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, 20.0f));
+        t = glm::rotate(t, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
+        s_people[5]->SetLocalTransform(t);
+        animateLimbs(s_people[5], time * walkSpeed);
+    }
+}
+
+// Update clock animation
+void SchoolBuilder::updateClockAnimation(SceneNode::Ptr root, float time)
+{
+    if (!s_clock) return;
+    
+    // Clock hands are the last 2 children: hourHand, minuteHand (no second hand)
+    size_t numChildren = s_clock->children.size();
+    if (numChildren < 2) return;
+    
+    auto hourHand = s_clock->children[numChildren - 2];
+    auto minuteHand = s_clock->children[numChildren - 1];
+    
+    // Calculate angles based on time
+    // Speed up time for demonstration (1 real second = 60 game seconds)
+    float gameTime = time * 60.0f;
+    
+    float minutesAngle = (gameTime / 60.0f) * 6.0f; // 360° / 60 minutes = 6° per minute
+    float hoursAngle = (gameTime / 3600.0f) * 30.0f; // 360° / 12 hours = 30° per hour
+    
+    // Update hour hand
+    if (hourHand) {
+        glm::mat4 t = hourHand->GetLocalTransform();
+        glm::vec3 pos = glm::vec3(t[3]);
+        t = glm::translate(glm::mat4(1.0f), pos);
+        t = glm::rotate(t, glm::radians(-hoursAngle), glm::vec3(0.0f, 0.0f, 1.0f)); // Rotate around Z axis
+        hourHand->SetLocalTransform(t);
+    }
+    
+    // Update minute hand
+    if (minuteHand) {
+        glm::mat4 t = minuteHand->GetLocalTransform();
+        glm::vec3 pos = glm::vec3(t[3]);
+        t = glm::translate(glm::mat4(1.0f), pos);
+        t = glm::rotate(t, glm::radians(-minutesAngle), glm::vec3(0.0f, 0.0f, 1.0f));
+        minuteHand->SetLocalTransform(t);
+    }
+}
+
+// Update cloud animation
+void SchoolBuilder::updateCloudAnimation(SceneNode::Ptr root, float time)
+{
+    if (s_clouds.empty()) return;
+    
+    // Each cloud drifts slowly across the sky at different speeds
+    float cloudSpeeds[] = {0.5f, 0.3f, 0.4f, 0.6f, 0.35f, 0.45f, 0.55f, 0.38f, 0.42f, 0.32f, 0.48f, 0.52f};
+    float cloudRange = 80.0f; // How far clouds travel (increased for larger clouds)
+    
+    // Base X positions for each cloud (evenly distributed)
+    float basePositions[] = {-50.0f, 40.0f, -60.0f, 55.0f, 0.0f, -30.0f, 65.0f, -70.0f, 25.0f, -15.0f, 45.0f, -45.0f};
+    
+    for (size_t i = 0; i < s_clouds.size() && i < 12; ++i)
+    {
+        // Get current transform
+        glm::mat4 t = s_clouds[i]->GetLocalTransform();
+        glm::vec3 pos = glm::vec3(t[3]);
+        
+        // Calculate new X position (drift from left to right)
+        float offset = std::sin(time * cloudSpeeds[i] * 0.1f) * cloudRange;
+        
+        // Update position (keep original Y and Z, only change X)
+        pos.x = basePositions[i] + offset;
+        
+        // Set new transform
+        t = glm::translate(glm::mat4(1.0f), pos);
+        s_clouds[i]->SetLocalTransform(t);
+    }
+}
+
+// Static birds for animation
+std::vector<SceneNode::Ptr> SchoolBuilder::s_birds;
+
+// Update bird animation
+void SchoolBuilder::updateBirdAnimation(SceneNode::Ptr root, float time)
+{
+    if (s_birds.empty()) return;
+    
+    float birdSpeed = 2.0f;
+    float circleRadius = 5.0f;
+    
+    for (size_t i = 0; i < s_birds.size(); ++i)
+    {
+        glm::mat4 t = s_birds[i]->GetLocalTransform();
+        glm::vec3 pos = glm::vec3(t[3]);
+        
+        // Simple circling or bobbing movement
+        float offsetX = std::cos(time * 0.5f + i) * 0.05f; 
+        float offsetY = std::sin(time * 1.0f + i) * 0.05f;
+        float offsetZ = std::sin(time * 0.3f + i) * 0.05f; // Slight forward/back
+        
+        pos.x += offsetX;
+        pos.y += offsetY;
+        pos.z += offsetZ;
+        
+        // Also rotate them slightly to face movement direction if we wanted complex physics, 
+        // but for ambient birds, small bobbing is enough to look alive.
+        
+        // Apply transform
+        t = glm::translate(glm::mat4(1.0f), pos);
+        
+        // Add a little flap rotation (wobble)
+        float flap = std::sin(time * 10.0f + i) * 5.0f; // Rapid flap
+        t = glm::rotate(t, glm::radians(flap), glm::vec3(0.0f, 0.0f, 1.0f)); // Banking
+        
+        // Keep original orientation somewhat? We just rebuilt T from identity, lost original rotation.
+        // It's better to update the existing matrix if we want to separate position update.
+        // But here we just set position. Re-applying basic rotation:
+        // Birds face generally forward (-Z or +X depending on flock)
+        // Let's just make them face consistent direction for now or reuse existing rotation from previous frame?
+        // Re-using existing rotation is hard if we rebuild matrix.
+        // Let's just drift them. The 'createBird' adds wing rotation relative to body.
+        
+        // Simplified: just update position in existing matrix?
+        // SceneNode transform is local.
+        // Let's just create new matrix with current pos + slight offset.
+        
+         // Reset rotational components for banking effect 
+         // Assume birds face generally -Z (default) or we need to know their heading.
+         // Let's just translate the EXISTING matrix instead of rebuilding.
+         
+         // Actually, simple way: modify the position columns of the matrix directly.
+         // t[3][0] += offsetX; ...
+         // But SceneNode encapsulation prefers SetLocalTransform.
+         
+         // Let's stick to the subtle drift added to current position.
+         // But we need to avoid "walking" away infinitely.
+         // We calculated offset from TIME, so we need Base Position.
+         // Like clouds, we need original positions.
+         // For simplicity: just bob in place relative to where they current are? 
+         // No, time-based offset from *initial* position is best.
+         // But we don't store initial positions easily here without a struct.
+         
+         // Alternative: small delta movement each frame?
+         // pos += delta. 
+         // Yes, pos.x += offsetX is delta if offsetX is small? No, offsetX is sine wave result.
+         // We are adding sine result to current pos? That would accelerate back and forth!
+         
+         // Correct way without storing state:
+         // Just use sine wave for visual fluff, don't accumulate.
+         // But we need base position.
+         // Let's assume the previous position was close to base.
+         // Or just define trajectories like clouds.
+         
+         // Let's do a simple circular path for all birds around a center point?
+         // Or linear flight.
+         
+         // Let's implement simple LINEAR flight with wrap-around.
+         
+         float speed = 2.5f;
+         pos.z -= speed * 0.016f; // Fly forward (-Z)
+         pos.y += std::sin(time * 3.0f + i) * 0.02f; // Bob up down
+         
+         // Reset if too far
+         if (pos.z < -60.0f) pos.z = 20.0f;
+         
+         // Rebuild matrix to maintain orientation
+         t = glm::translate(glm::mat4(1.0f), pos);
+         // Rotate 180 to face camera if moving -Z matches face? 
+         // Actually createBird makes them face +Z? No, usually +Z is "back".
+         // Let's assume they face -Z (standard).
+         
+         // Add banking/flapping
+         float bank = std::sin(time * 5.0f + i) * 10.0f;
+         t = glm::rotate(t, glm::radians(bank), glm::vec3(0.0f, 0.0f, 1.0f));
+         
+         s_birds[i]->SetLocalTransform(t);
+    }
 }

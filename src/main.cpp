@@ -249,12 +249,14 @@ int main() {
         }
         sceneShader.SetVec3("ambientColor", ambientColor);
         
-        // Set up streetlight point lights (symmetric pairs) - weaker intensity
-        int numPairs = 3;
+        // Set up all point lights: 6 central pathway + 6 perimeter = 12 total
+        int totalLights = 12;
         float lightHeight = 4.0f;
-        float spacing = 7.0f;
-        sceneShader.SetInt("numPointLights", numPairs * 2);
+        sceneShader.SetInt("numPointLights", totalLights);
         
+        // Central pathway lights (6 lights in 3 symmetric pairs)
+        int numPairs = 3;
+        float spacing = 7.0f;
         for (int i = 0; i < numPairs; ++i)
         {
             float z = 14.0f - i * spacing;
@@ -263,14 +265,44 @@ int main() {
             std::string baseNameL = "pointLights[" + std::to_string(i * 2) + "]";
             sceneShader.SetVec3(baseNameL + ".position", glm::vec3(-2.5f, lightHeight, z));
             sceneShader.SetVec3(baseNameL + ".color", glm::vec3(1.0f, 0.9f, 0.7f));
-            sceneShader.SetFloat(baseNameL + ".intensity", 3.5f); // Reduced from 5.0
+            sceneShader.SetFloat(baseNameL + ".intensity", 3.5f);
             
             // Right light
             std::string baseNameR = "pointLights[" + std::to_string(i * 2 + 1) + "]";
             sceneShader.SetVec3(baseNameR + ".position", glm::vec3(2.5f, lightHeight, z));
             sceneShader.SetVec3(baseNameR + ".color", glm::vec3(1.0f, 0.9f, 0.7f));
-            sceneShader.SetFloat(baseNameR + ".intensity", 3.5f); // Reduced from 5.0
+            sceneShader.SetFloat(baseNameR + ".intensity", 3.5f);
         }
+        
+        // Perimeter lights (6 lights around school - outside sports courts)
+        glm::vec3 perimeterLightPositions[] = {
+            glm::vec3(-32.0f, lightHeight, 0.0f),    // Left side 1 (outside basketball court)
+            glm::vec3(-39.0f, lightHeight, -15.0f),  // Left side 2 (adjusted by user)
+            glm::vec3(32.0f, lightHeight, 0.0f),     // Right side 1 (outside football field)
+            glm::vec3(39.0f, lightHeight, -15.0f),   // Right side 2 (adjusted by user)
+            glm::vec3(-15.0f, lightHeight, -20.0f),  // Back left
+            glm::vec3(15.0f, lightHeight, -20.0f)    // Back right
+        };
+        
+        for (int i = 0; i < 6; ++i)
+        {
+            std::string baseName = "pointLights[" + std::to_string(6 + i) + "]"; // Start from index 6
+            sceneShader.SetVec3(baseName + ".position", perimeterLightPositions[i]);
+            sceneShader.SetVec3(baseName + ".color", glm::vec3(1.0f, 0.9f, 0.7f));
+            sceneShader.SetFloat(baseName + ".intensity", 4.0f);
+        }
+
+        // Update people animations
+        SchoolBuilder::updatePeopleAnimation(root, currentFrame);
+        
+        // Update clock animation
+        SchoolBuilder::updateClockAnimation(root, currentFrame);
+        
+        // Update cloud animation
+        SchoolBuilder::updateCloudAnimation(root, currentFrame);
+        
+        // Update bird animation
+        SchoolBuilder::updateBirdAnimation(root, currentFrame);
 
         // Update global transforms if any dynamic transforms exist (static in our simple builder)
         root->updateGlobalTransform();
