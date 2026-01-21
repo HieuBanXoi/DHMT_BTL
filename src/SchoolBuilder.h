@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SceneNode.h"
+#include <vector>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -74,4 +75,33 @@ public:
     
     // Store bird nodes for animation
     static std::vector<SceneNode::Ptr> s_birds;
+    
+    // Helper struct for flag animation
+    struct FlagPart {
+        SceneNode::Ptr node;
+        float xOffset; // Distance from pole along X axis
+        glm::mat4 initialTransform;
+    };
+    
+    // Helper struct for fountain water animation
+    struct WaterJet {
+        SceneNode::Ptr node;
+        float baseY;           // Base Y position
+        float amplitude;       // Oscillation amplitude
+        float frequency;       // Oscillation frequency
+        float phaseOffset;     // Phase offset for variation
+        glm::mat4 initialTransform;
+    };
+    
+    // Store flag parts for animation
+    static std::vector<FlagPart> s_flagParts;
+    
+    // Store fountain water jets for animation
+    static std::vector<WaterJet> s_waterJets;
+    
+    // Update flag animation
+    static void updateFlagAnimation(SceneNode::Ptr root, float time);
+    
+    // Update fountain water animation
+    static void updateFountainAnimation(SceneNode::Ptr root, float time);
 };

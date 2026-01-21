@@ -769,6 +769,10 @@ static SceneNode::Ptr createFlagpole(float height = 10.0f)
 {
     auto flagpoleNode = std::make_shared<SceneNode>();
     
+    // Clear old flag parts if any
+    SchoolBuilder::s_flagParts.clear();
+    
+    
     // Pole (tall metal pole)
     glm::vec3 poleColor(0.7f, 0.7f, 0.75f); // Silver/grey metal
     float poleRadius = 0.08f;
@@ -820,6 +824,13 @@ static SceneNode::Ptr createFlagpole(float height = 10.0f)
             glm::vec3(xOffset, flagY, 0.0f)  // Z = 0, completely flat
         );
         flagpoleNode->AddChild(flagSegment);
+        
+        // Save for animation
+        SchoolBuilder::FlagPart part;
+        part.node = flagSegment;
+        part.xOffset = xOffset;
+        part.initialTransform = flagSegment->GetLocalTransform();
+        SchoolBuilder::s_flagParts.push_back(part);
     }
     
     // Yellow 5-point star - pixel art approach for accuracy
@@ -889,12 +900,986 @@ int starGrid[31][31] = {
                     glm::vec3(x, y, starCenter.z)
                 );
                 flagpoleNode->AddChild(pixel);
+                
+                // Save for animation
+                SchoolBuilder::FlagPart part;
+                part.node = pixel;
+                part.xOffset = x; // World X relative to pole is approximately x (since pole is at 0,0,0 local)
+                part.initialTransform = pixel->GetLocalTransform();
+                SchoolBuilder::s_flagParts.push_back(part);
             }
         }
     }
 
     
     return flagpoleNode;
+}
+
+// Helper to create a classical statue on a pedestal
+static SceneNode::Ptr createStatue()
+{
+    auto statueNode = std::make_shared<SceneNode>();
+    
+    // Color palette
+    glm::vec3 stoneGray(0.55f, 0.55f, 0.58f);      // Base stone
+    glm::vec3 marbleWhite(0.92f, 0.92f, 0.95f);    // Statue marble
+    glm::vec3 darkStone(0.35f, 0.35f, 0.38f);      // Accent stone
+    glm::vec3 bronze(0.7f, 0.5f, 0.3f);            // Bronze plaques
+    
+    // === BASE PLATFORM (3-tiered) ===
+    // Bottom tier (largest)
+    auto baseTier1 = createCuboid(
+        glm::vec3(3.0f, 0.3f, 3.0f),
+        darkStone,
+        glm::vec3(0.0f, 0.15f, 0.0f)
+    );
+    statueNode->AddChild(baseTier1);
+    
+    // Middle tier
+    auto baseTier2 = createCuboid(
+        glm::vec3(2.6f, 0.25f, 2.6f),
+        stoneGray,
+        glm::vec3(0.0f, 0.425f, 0.0f)
+    );
+    statueNode->AddChild(baseTier2);
+    
+    // Top tier
+    auto baseTier3 = createCuboid(
+        glm::vec3(2.2f, 0.2f, 2.2f),
+        darkStone,
+        glm::vec3(0.0f, 0.65f, 0.0f)
+    );
+    statueNode->AddChild(baseTier3);
+    
+    // === PEDESTAL ===
+    float pedestalHeight = 2.5f;
+    float pedestalWidth = 1.2f;
+    
+    // Main pedestal column
+    auto pedestal = createCuboid(
+        glm::vec3(pedestalWidth, pedestalHeight, pedestalWidth),
+        marbleWhite,
+        glm::vec3(0.0f, 0.75f + pedestalHeight/2.0f, 0.0f)
+    );
+    statueNode->AddChild(pedestal);
+    
+    // Pedestal top cap
+    auto pedestalCap = createCuboid(
+        glm::vec3(pedestalWidth + 0.2f, 0.15f, pedestalWidth + 0.2f),
+        stoneGray,
+        glm::vec3(0.0f, 0.75f + pedestalHeight + 0.075f, 0.0f)
+    );
+    statueNode->AddChild(pedestalCap);
+    
+    // Decorative bronze plaques on all four pedestal sides
+    float plaqueY = 0.75f + pedestalHeight/2.0f;
+    
+    // Front plaque
+    auto plaqueFront = createCuboid(
+        glm::vec3(0.7f, 0.5f, 0.02f),
+        bronze,
+        glm::vec3(0.0f, plaqueY, pedestalWidth/2.0f + 0.01f)
+    );
+    statueNode->AddChild(plaqueFront);
+    
+    // Back plaque
+    auto plaqueBack = createCuboid(
+        glm::vec3(0.7f, 0.5f, 0.02f),
+        bronze,
+        glm::vec3(0.0f, plaqueY, -pedestalWidth/2.0f - 0.01f)
+    );
+    statueNode->AddChild(plaqueBack);
+    
+    // Left plaque
+    auto plaqueLeft = createCuboid(
+        glm::vec3(0.02f, 0.5f, 0.7f),
+        bronze,
+        glm::vec3(-pedestalWidth/2.0f - 0.01f, plaqueY, 0.0f)
+    );
+    statueNode->AddChild(plaqueLeft);
+    
+    // Right plaque
+    auto plaqueRight = createCuboid(
+        glm::vec3(0.02f, 0.5f, 0.7f),
+        bronze,
+        glm::vec3(pedestalWidth/2.0f + 0.01f, plaqueY, 0.0f)
+    );
+    statueNode->AddChild(plaqueRight);
+    
+    // Decorative bands on pedestal
+    for (int i = 0; i < 3; ++i) {
+        float bandY = 0.75f + 0.5f + i * 0.7f;
+        auto band = createCuboid(
+            glm::vec3(pedestalWidth + 0.15f, 0.08f, pedestalWidth + 0.15f),
+            bronze,
+            glm::vec3(0.0f, bandY, 0.0f)
+        );
+        statueNode->AddChild(band);
+    }
+    
+    // === STATUE FIGURE ===
+    float figureBaseY = 0.75f + pedestalHeight + 0.15f;
+    
+    // Base/feet
+    auto feet = createCuboid(
+        glm::vec3(0.6f, 0.25f, 0.5f),
+        marbleWhite,
+        glm::vec3(0.0f, figureBaseY + 0.125f, 0.0f)
+    );
+    statueNode->AddChild(feet);
+    
+    // Lower body/robe (flowing)
+    auto lowerBody = createCuboid(
+        glm::vec3(0.8f, 1.2f, 0.7f),
+        marbleWhite,
+        glm::vec3(0.0f, figureBaseY + 0.25f + 0.6f, 0.0f)
+    );
+    statueNode->AddChild(lowerBody);
+    
+    // Robe detail - flowing fabric
+    auto robeDetail = createCuboid(
+        glm::vec3(0.85f, 0.3f, 0.65f),
+        marbleWhite,
+        glm::vec3(0.0f, figureBaseY + 0.5f, 0.0f)
+    );
+    statueNode->AddChild(robeDetail);
+    
+    // Upper torso
+    auto torso = createCuboid(
+        glm::vec3(0.7f, 0.9f, 0.6f),
+        marbleWhite,
+        glm::vec3(0.0f, figureBaseY + 1.45f + 0.45f, 0.0f)
+    );
+    statueNode->AddChild(torso);
+    
+    // Shoulders/chest detail
+    auto shoulders = createCuboid(
+        glm::vec3(0.9f, 0.25f, 0.55f),
+        marbleWhite,
+        glm::vec3(0.0f, figureBaseY + 1.9f + 0.125f, 0.0f)
+    );
+    statueNode->AddChild(shoulders);
+    
+    // Left arm (raised, holding something)
+    auto leftArmUpper = createCuboid(
+        glm::vec3(0.18f, 0.5f, 0.18f),
+        marbleWhite,
+        glm::vec3(-0.5f, figureBaseY + 1.9f, 0.0f)
+    );
+    statueNode->AddChild(leftArmUpper);
+    
+    auto leftArmLower = createCuboid(
+        glm::vec3(0.16f, 0.5f, 0.16f),
+        marbleWhite,
+        glm::vec3(-0.5f, figureBaseY + 2.4f, 0.0f)
+    );
+    statueNode->AddChild(leftArmLower);
+    
+    // Right arm (at side, bent)
+    auto rightArmUpper = createCuboid(
+        glm::vec3(0.18f, 0.5f, 0.18f),
+        marbleWhite,
+        glm::vec3(0.5f, figureBaseY + 1.7f, 0.0f)
+    );
+    statueNode->AddChild(rightArmUpper);
+    
+    auto rightArmLower = createCuboid(
+        glm::vec3(0.16f, 0.4f, 0.16f),
+        marbleWhite,
+        glm::vec3(0.5f, figureBaseY + 1.2f, 0.1f)
+    );
+    statueNode->AddChild(rightArmLower);
+    
+    // Head (larger, more detailed)
+    auto head = createCuboid(
+        glm::vec3(0.4f, 0.45f, 0.4f),
+        marbleWhite,
+        glm::vec3(0.0f, figureBaseY + 2.4f, 0.0f)
+    );
+    statueNode->AddChild(head);
+    
+    // Facial features - nose
+    auto nose = createCuboid(
+        glm::vec3(0.08f, 0.12f, 0.1f),
+        marbleWhite,
+        glm::vec3(0.0f, figureBaseY + 2.4f, 0.22f)
+    );
+    statueNode->AddChild(nose);
+    
+    // Eyes (recessed)
+    auto leftEye = createCuboid(
+        glm::vec3(0.06f, 0.06f, 0.04f),
+        darkStone,
+        glm::vec3(-0.1f, figureBaseY + 2.45f, 0.18f)
+    );
+    statueNode->AddChild(leftEye);
+    
+    auto rightEye = createCuboid(
+        glm::vec3(0.06f, 0.06f, 0.04f),
+        darkStone,
+        glm::vec3(0.1f, figureBaseY + 2.45f, 0.18f)
+    );
+    statueNode->AddChild(rightEye);
+    
+    // Crown/headpiece (more ornate)
+    auto crownBase = createCuboid(
+        glm::vec3(0.48f, 0.08f, 0.48f),
+        bronze,
+        glm::vec3(0.0f, figureBaseY + 2.66f, 0.0f)
+    );
+    statueNode->AddChild(crownBase);
+    
+    auto crownTop = createCuboid(
+        glm::vec3(0.42f, 0.12f, 0.42f),
+        bronze,
+        glm::vec3(0.0f, figureBaseY + 2.76f, 0.0f)
+    );
+    statueNode->AddChild(crownTop);
+    
+    // Crown points/spikes
+    for (int i = 0; i < 4; ++i) {
+        float angle = i * 90.0f;
+        float x = std::cos(glm::radians(angle)) * 0.22f;
+        float z = std::sin(glm::radians(angle)) * 0.22f;
+        
+        auto spike = createCuboid(
+            glm::vec3(0.06f, 0.15f, 0.06f),
+            bronze,
+            glm::vec3(x, figureBaseY + 2.87f, z)
+        );
+        statueNode->AddChild(spike);
+    }
+    
+    // Book/scroll in raised hand (more detailed)
+    auto book = createCuboid(
+        glm::vec3(0.3f, 0.22f, 0.26f),
+        bronze,
+        glm::vec3(-0.5f, figureBaseY + 2.7f, 0.0f)
+    );
+    statueNode->AddChild(book);
+    
+    // Book pages detail
+    auto bookPages = createCuboid(
+        glm::vec3(0.28f, 0.2f, 0.02f),
+        marbleWhite,
+        glm::vec3(-0.5f, figureBaseY + 2.7f, 0.14f)
+    );
+    statueNode->AddChild(bookPages);
+    
+    // Hand holding book
+    auto leftHand = createCuboid(
+        glm::vec3(0.12f, 0.15f, 0.1f),
+        marbleWhite,
+        glm::vec3(-0.5f, figureBaseY + 2.55f, 0.0f)
+    );
+    statueNode->AddChild(leftHand);
+    
+    // Right hand (at side)
+    auto rightHand = createCuboid(
+        glm::vec3(0.12f, 0.15f, 0.1f),
+        marbleWhite,
+        glm::vec3(0.5f, figureBaseY + 1.0f, 0.12f)
+    );
+    statueNode->AddChild(rightHand);
+    
+    // Decorative sash/belt (more ornate)
+    auto belt = createCuboid(
+        glm::vec3(0.85f, 0.12f, 0.65f),
+        bronze,
+        glm::vec3(0.0f, figureBaseY + 1.45f, 0.0f)
+    );
+    statueNode->AddChild(belt);
+    
+    // Belt buckle/ornament
+    auto buckle = createCuboid(
+        glm::vec3(0.15f, 0.15f, 0.08f),
+        bronze,
+        glm::vec3(0.0f, figureBaseY + 1.45f, 0.38f)
+    );
+    statueNode->AddChild(buckle);
+    
+    // Drapery folds on robe (vertical)
+    for (int i = 0; i < 5; ++i) {
+        float xPos = -0.3f + i * 0.15f;
+        auto fold = createCuboid(
+            glm::vec3(0.04f, 0.8f, 0.05f),
+            marbleWhite,
+            glm::vec3(xPos, figureBaseY + 0.7f, 0.38f)
+        );
+        statueNode->AddChild(fold);
+    }
+    
+    // Additional horizontal drapery folds
+    for (int i = 0; i < 3; ++i) {
+        float yPos = figureBaseY + 0.6f + i * 0.3f;
+        auto hFold = createCuboid(
+            glm::vec3(0.75f, 0.03f, 0.05f),
+            marbleWhite,
+            glm::vec3(0.0f, yPos, 0.37f)
+        );
+        statueNode->AddChild(hFold);
+    }
+    
+    // Cloak/cape flowing behind
+    auto cape = createCuboid(
+        glm::vec3(0.7f, 1.2f, 0.15f),
+        marbleWhite,
+        glm::vec3(0.0f, figureBaseY + 1.5f, -0.4f)
+    );
+    statueNode->AddChild(cape);
+    
+    // Cape folds/texture
+    for (int i = 0; i < 4; ++i) {
+        float xPos = -0.25f + i * 0.17f;
+        auto capeFold = createCuboid(
+            glm::vec3(0.04f, 1.0f, 0.06f),
+            marbleWhite,
+            glm::vec3(xPos, figureBaseY + 1.5f, -0.48f)
+        );
+        statueNode->AddChild(capeFold);
+    }
+    
+    // Decorative scrollwork on shoulders
+    for (int i = 0; i < 2; ++i) {
+        float xPos = (i == 0) ? -0.48f : 0.48f;
+        auto scroll = createCuboid(
+            glm::vec3(0.08f, 0.12f, 0.08f),
+            bronze,
+            glm::vec3(xPos, figureBaseY + 2.1f, 0.0f)
+        );
+        statueNode->AddChild(scroll);
+    }
+    
+    // Necklace/collar ornament
+    auto collar = createCuboid(
+        glm::vec3(0.6f, 0.08f, 0.45f),
+        bronze,
+        glm::vec3(0.0f, figureBaseY + 1.88f, 0.0f)
+    );
+    statueNode->AddChild(collar);
+    
+    // Decorative medallion on chest
+    auto medallion = createCuboid(
+        glm::vec3(0.15f, 0.15f, 0.05f),
+        bronze,
+        glm::vec3(0.0f, figureBaseY + 1.7f, 0.32f)
+    );
+    statueNode->AddChild(medallion);
+    
+    // Decorative frieze on pedestal (relief band)
+    for (int i = 0; i < 8; ++i) {
+        float angle = i * 45.0f;
+        float x = std::cos(glm::radians(angle)) * (pedestalWidth/2.0f + 0.01f);
+        float z = std::sin(glm::radians(angle)) * (pedestalWidth/2.0f + 0.01f);
+        
+        auto friezeElement = createCuboid(
+            glm::vec3(0.12f, 0.12f, 0.03f),
+            bronze,
+            glm::vec3(x, 0.75f + pedestalHeight * 0.7f, z)
+        );
+        statueNode->AddChild(friezeElement);
+    }
+    
+    // Decorative elements on base
+    // Corner posts with capitals
+    for (int i = 0; i < 4; ++i) {
+        float angle = i * 90.0f;
+        float x = std::cos(glm::radians(angle)) * 1.4f;
+        float z = std::sin(glm::radians(angle)) * 1.4f;
+        
+        // Post base
+        auto postBase = createCuboid(
+            glm::vec3(0.2f, 0.1f, 0.2f),
+            bronze,
+            glm::vec3(x, 0.05f, z)
+        );
+        statueNode->AddChild(postBase);
+        
+        // Post shaft
+        auto post = createCuboid(
+            glm::vec3(0.14f, 0.7f, 0.14f),
+            darkStone,
+            glm::vec3(x, 0.45f, z)
+        );
+        statueNode->AddChild(post);
+        
+        // Decorative bands on posts
+        for (int j = 0; j < 2; ++j) {
+            float bandY = 0.3f + j * 0.3f;
+            auto postBand = createCuboid(
+                glm::vec3(0.18f, 0.04f, 0.18f),
+                bronze,
+                glm::vec3(x, bandY, z)
+            );
+            statueNode->AddChild(postBand);
+        }
+        
+        // Post capital
+        auto capital = createCuboid(
+            glm::vec3(0.2f, 0.12f, 0.2f),
+            bronze,
+            glm::vec3(x, 0.86f, z)
+        );
+        statueNode->AddChild(capital);
+        
+        // Decorative sphere on top
+        auto sphere = createCuboid(
+            glm::vec3(0.18f, 0.18f, 0.18f),
+            bronze,
+            glm::vec3(x, 1.0f, z)
+        );
+        statueNode->AddChild(sphere);
+    }
+    
+    // Additional decorative reliefs on base tiers
+    for (int i = 0; i < 4; ++i) {
+        float angle = i * 90.0f + 45.0f; // Offset by 45 degrees
+        float x = std::cos(glm::radians(angle)) * 1.05f;
+        float z = std::sin(glm::radians(angle)) * 1.05f;
+        
+        auto relief = createCuboid(
+            glm::vec3(0.15f, 0.15f, 0.05f),
+            bronze,
+            glm::vec3(x, 0.5f, z)
+        );
+        statueNode->AddChild(relief);
+    }
+    
+    return statueNode;
+}
+
+// Helper to create interactive light control panel
+static SceneNode::Ptr createControlPanel()
+{
+    auto panelNode = std::make_shared<SceneNode>();
+    
+    // Colors
+    glm::vec3 panelGray(0.3f, 0.3f, 0.35f);      // Dark gray panel
+    glm::vec3 buttonGreen(0.2f, 0.8f, 0.3f);     // Green for +
+    glm::vec3 buttonRed(0.9f, 0.2f, 0.2f);       // Red for -
+    glm::vec3 switchBase(0.5f, 0.5f, 0.5f);      // Gray switch base
+    glm::vec3 switchLever(0.8f, 0.3f, 0.1f);     // Orange lever
+    
+    // === PANEL BASE ===
+    auto panelBase = createCuboid(
+        glm::vec3(1.2f, 1.5f, 0.1f),
+        panelGray,
+        glm::vec3(0.0f, 0.75f, 0.0f)
+    );
+    panelNode->AddChild(panelBase);
+    
+    // === TOGGLE SWITCH (ON/OFF) ===
+    // Switch base
+    auto switchBaseObj = createCuboid(
+        glm::vec3(0.3f, 0.15f, 0.15f),
+        switchBase,
+        glm::vec3(0.0f, 1.0f, 0.08f)
+    );
+    panelNode->AddChild(switchBaseObj);
+    
+    // Switch lever (will rotate based on state)
+    auto switchLeverObj = createCuboid(
+        glm::vec3(0.08f, 0.25f, 0.08f),
+        switchLever,
+        glm::vec3(0.0f, 1.0f, 0.15f)  // Slightly forward
+    );
+    panelNode->AddChild(switchLeverObj);
+    
+    // === PLUS BUTTON ===
+    auto plusButton = createCuboid(
+        glm::vec3(0.25f, 0.25f, 0.1f),
+        buttonGreen,
+        glm::vec3(0.0f, 0.6f, 0.08f)
+    );
+    panelNode->AddChild(plusButton);
+    
+    // Plus symbol (horizontal)
+    auto plusH = createCuboid(
+        glm::vec3(0.15f, 0.03f, 0.03f),
+        glm::vec3(1.0f, 1.0f, 1.0f),
+        glm::vec3(0.0f, 0.6f, 0.14f)
+    );
+    panelNode->AddChild(plusH);
+    
+    // Plus symbol (vertical)
+    auto plusV = createCuboid(
+        glm::vec3(0.03f, 0.15f, 0.03f),
+        glm::vec3(1.0f, 1.0f, 1.0f),
+        glm::vec3(0.0f, 0.6f, 0.14f)
+    );
+    panelNode->AddChild(plusV);
+    
+    // === MINUS BUTTON ===
+    auto minusButton = createCuboid(
+        glm::vec3(0.25f, 0.25f, 0.1f),
+        buttonRed,
+        glm::vec3(0.0f, 0.25f, 0.08f)
+    );
+    panelNode->AddChild(minusButton);
+    
+    // Minus symbol
+    auto minusSymbol = createCuboid(
+        glm::vec3(0.15f, 0.03f, 0.03f),
+        glm::vec3(1.0f, 1.0f, 1.0f),
+        glm::vec3(0.0f, 0.25f, 0.14f)
+    );
+    panelNode->AddChild(minusSymbol);
+    
+    return panelNode;
+}
+
+// Helper to create a multi-tiered fountain
+static SceneNode::Ptr createFountain()
+{
+    auto fountainNode = std::make_shared<SceneNode>();
+    
+    // Color palette
+    glm::vec3 stoneGray(0.6f, 0.6f, 0.65f);        // Main stone
+    glm::vec3 darkStone(0.4f, 0.4f, 0.45f);        // Accent stone
+    glm::vec3 waterBlue(0.3f, 0.5f, 0.7f);         // Water color
+    glm::vec3 bronze(0.7f, 0.5f, 0.3f);            // Bronze accents
+    glm::vec3 marble(0.9f, 0.9f, 0.92f);           // Light marble
+    
+    // === BASE POOL (Water Basin) - SIMPLIFIED FOR VISIBILITY ===
+    float poolRadius = 3.5f;
+    float poolHeight = 0.3f;
+    
+    // Pool base/floor (dark stone)
+    auto poolBase = createCuboid(
+        glm::vec3(poolRadius * 2, 0.2f, poolRadius * 2),
+        darkStone,
+        glm::vec3(0.0f, 0.1f, 0.0f)
+    );
+    fountainNode->AddChild(poolBase);
+    
+    // Pool walls (4 sides) - TALLER THAN WATER
+    float wallHeight = 0.4f;
+    float wallThickness = 0.12f;
+    
+    // Front wall
+    auto wallFront = createCuboid(
+        glm::vec3(poolRadius * 2, wallHeight, wallThickness),
+        darkStone,
+        glm::vec3(0.0f, 0.2f + wallHeight / 2.0f, poolRadius - wallThickness / 2.0f)
+    );
+    fountainNode->AddChild(wallFront);
+    
+    // Back wall
+    auto wallBack = createCuboid(
+        glm::vec3(poolRadius * 2, wallHeight, wallThickness),
+        darkStone,
+        glm::vec3(0.0f, 0.2f + wallHeight / 2.0f, -poolRadius + wallThickness / 2.0f)
+    );
+    fountainNode->AddChild(wallBack);
+    
+    // Left wall
+    auto wallLeft = createCuboid(
+        glm::vec3(wallThickness, wallHeight, poolRadius * 2 - wallThickness * 2),
+        darkStone,
+        glm::vec3(-poolRadius + wallThickness / 2.0f, 0.2f + wallHeight / 2.0f, 0.0f)
+    );
+    fountainNode->AddChild(wallLeft);
+    
+    // Right wall
+    auto wallRight = createCuboid(
+        glm::vec3(wallThickness, wallHeight, poolRadius * 2 - wallThickness * 2),
+        darkStone,
+        glm::vec3(poolRadius - wallThickness / 2.0f, 0.2f + wallHeight / 2.0f, 0.0f)
+    );
+    fountainNode->AddChild(wallRight);
+    
+    // Pool rim/edge (bronze decorative border - 4 sides around water)
+    float rimWidth = 0.15f;
+    float rimHeight = 0.08f;
+    float rimY = 0.2f + wallHeight;
+    
+    // Front rim
+    auto rimFront = createCuboid(
+        glm::vec3(poolRadius * 2 + wallThickness, rimHeight, rimWidth),
+        bronze,
+        glm::vec3(0.0f, rimY, poolRadius)
+    );
+    fountainNode->AddChild(rimFront);
+    
+    // Back rim
+    auto rimBack = createCuboid(
+        glm::vec3(poolRadius * 2 + wallThickness, rimHeight, rimWidth),
+        bronze,
+        glm::vec3(0.0f, rimY, -poolRadius)
+    );
+    fountainNode->AddChild(rimBack);
+    
+    // Left rim
+    auto rimLeft = createCuboid(
+        glm::vec3(rimWidth, rimHeight, poolRadius * 2 + wallThickness),
+        bronze,
+        glm::vec3(-poolRadius, rimY, 0.0f)
+    );
+    fountainNode->AddChild(rimLeft);
+    
+    // Right rim
+    auto rimRight = createCuboid(
+        glm::vec3(rimWidth, rimHeight, poolRadius * 2 + wallThickness),
+        bronze,
+        glm::vec3(poolRadius, rimY, 0.0f)
+    );
+    fountainNode->AddChild(rimRight);
+    
+    // WATER - LOWER LEVEL, INSIDE WALLS
+    auto poolWater = createCuboid(
+        glm::vec3(poolRadius * 2 - wallThickness * 2 - 0.1f, 0.25f, poolRadius * 2 - wallThickness * 2 - 0.1f),
+        glm::vec3(0.4f, 0.75f, 1.0f),  // BRIGHT cyan
+        glm::vec3(0.0f, 0.325f, 0.0f)  // Lower: inside walls, below rim
+    );
+    fountainNode->AddChild(poolWater);
+    
+    // Decorative pool edge details
+    for (int i = 0; i < 12; ++i) {
+        float angle = i * 30.0f;
+        float x = std::cos(glm::radians(angle)) * (poolRadius - 0.2f);
+        float z = std::sin(glm::radians(angle)) * (poolRadius - 0.2f);
+        
+        auto edgeOrnament = createCuboid(
+            glm::vec3(0.15f, 0.2f, 0.15f),
+            bronze,
+            glm::vec3(x, poolHeight, z)
+        );
+        fountainNode->AddChild(edgeOrnament);
+    }
+    
+    // === TIER 1 (Bottom tier) ===
+    float tier1Y = poolHeight + 0.3f;
+    float tier1Radius = 2.0f;
+    
+    // Tier 1 basin
+    auto tier1Basin = createCuboid(
+        glm::vec3(tier1Radius * 2, 0.25f, tier1Radius * 2),
+        marble,
+        glm::vec3(0.0f, tier1Y, 0.0f)
+    );
+    fountainNode->AddChild(tier1Basin);
+    
+    // Tier 1 rim
+    auto tier1Rim = createCuboid(
+        glm::vec3(tier1Radius * 2 + 0.2f, 0.1f, tier1Radius * 2 + 0.2f),
+        bronze,
+        glm::vec3(0.0f, tier1Y + 0.15f, 0.0f)
+    );
+    fountainNode->AddChild(tier1Rim);
+    
+    // Tier 1 water - MORE VISIBLE
+    auto tier1Water = createCuboid(
+        glm::vec3(tier1Radius * 2 - 0.2f, 0.15f, tier1Radius * 2 - 0.2f),  // Taller
+        glm::vec3(0.2f, 0.6f, 0.85f),  // Brighter blue
+        glm::vec3(0.0f, tier1Y + 0.15f, 0.0f)  // Higher position
+    );
+    fountainNode->AddChild(tier1Water);
+    
+    // Water spouts on tier 1
+    for (int i = 0; i < 8; ++i) {
+        float angle = i * 45.0f;
+        float x = std::cos(glm::radians(angle)) * tier1Radius;
+        float z = std::sin(glm::radians(angle)) * tier1Radius;
+        
+        auto spout = createCuboid(
+            glm::vec3(0.08f, 0.15f, 0.08f),
+            bronze,
+            glm::vec3(x, tier1Y + 0.2f, z)
+        );
+        fountainNode->AddChild(spout);
+    }
+    
+    // === TIER 2 (Middle tier) ===
+    float tier2Y = tier1Y + 0.8f;
+    float tier2Radius = 1.3f;
+    
+    // Tier 2 basin
+    auto tier2Basin = createCuboid(
+        glm::vec3(tier2Radius * 2, 0.2f, tier2Radius * 2),
+        marble,
+        glm::vec3(0.0f, tier2Y, 0.0f)
+    );
+    fountainNode->AddChild(tier2Basin);
+    
+    // Tier 2 rim
+    auto tier2Rim = createCuboid(
+        glm::vec3(tier2Radius * 2 + 0.15f, 0.08f, tier2Radius * 2 + 0.15f),
+        bronze,
+        glm::vec3(0.0f, tier2Y + 0.12f, 0.0f)
+    );
+    fountainNode->AddChild(tier2Rim);
+    
+    // Tier 2 water - MORE VISIBLE
+    auto tier2Water = createCuboid(
+        glm::vec3(tier2Radius * 2 - 0.15f, 0.12f, tier2Radius * 2 - 0.15f),  // Taller
+        glm::vec3(0.2f, 0.6f, 0.85f),  // Brighter blue
+        glm::vec3(0.0f, tier2Y + 0.12f, 0.0f)  // Higher position
+    );
+    fountainNode->AddChild(tier2Water);
+    
+    // === TIER 3 (Upper tier) ===
+    float tier3Y = tier2Y + 0.6f;
+    float tier3Radius = 0.8f;
+    
+    // Tier 3 basin
+    auto tier3Basin = createCuboid(
+        glm::vec3(tier3Radius * 2, 0.15f, tier3Radius * 2),
+        marble,
+        glm::vec3(0.0f, tier3Y, 0.0f)
+    );
+    fountainNode->AddChild(tier3Basin);
+    
+    // Tier 3 rim
+    auto tier3Rim = createCuboid(
+        glm::vec3(tier3Radius * 2 + 0.1f, 0.06f, tier3Radius * 2 + 0.1f),
+        bronze,
+        glm::vec3(0.0f, tier3Y + 0.09f, 0.0f)
+    );
+    fountainNode->AddChild(tier3Rim);
+    
+    // Tier 3 water - MORE VISIBLE
+    auto tier3Water = createCuboid(
+        glm::vec3(tier3Radius * 2 - 0.1f, 0.1f, tier3Radius * 2 - 0.1f),  // Taller
+        glm::vec3(0.2f, 0.6f, 0.85f),  // Brighter blue
+        glm::vec3(0.0f, tier3Y + 0.1f, 0.0f)  // Higher position
+    );
+    fountainNode->AddChild(tier3Water);
+    
+    // === CENTRAL WATER JET (Animated fountain spray) - LOWER ===
+    glm::vec3 waterJetColor(0.5f, 0.8f, 1.0f);  // Light blue water
+    float jetBaseY = tier3Y + 0.75f;  // Start from top tier
+    int numJetSegments = 5;  // Fewer segments = shorter jet
+    
+    // Clear old jets
+    SchoolBuilder::s_waterJets.clear();
+    
+    for (int i = 0; i < numJetSegments; ++i) {
+        float segmentHeight = 0.25f;  // Shorter segments
+        float segmentWidth = 0.08f - (i * 0.01f);  // Taper as it goes up
+        float yPos = jetBaseY + i * segmentHeight;
+        
+        auto jetSegment = createCuboid(
+            glm::vec3(segmentWidth, segmentHeight, segmentWidth),
+            waterJetColor,
+            glm::vec3(0.0f, yPos, 0.0f)
+        );
+        fountainNode->AddChild(jetSegment);
+        
+        // Store for animation
+        SchoolBuilder::WaterJet jetData;
+        jetData.node = jetSegment;
+        jetData.baseY = yPos;
+        jetData.amplitude = 0.12f + i * 0.02f;  // Higher segments move more
+        jetData.frequency = 3.0f - i * 0.1f;
+        jetData.phaseOffset = i * 0.3f;  // Stagger the animation
+        jetData.initialTransform = jetSegment->GetLocalTransform();
+        SchoolBuilder::s_waterJets.push_back(jetData);
+    }
+    
+    // Water spray at top (dispersing effect)
+    for (int i = 0; i < 6; ++i) {
+        float angle = i * 60.0f;
+        float radius = 0.12f;
+        float x = std::cos(glm::radians(angle)) * radius;
+        float z = std::sin(glm::radians(angle)) * radius;
+        float topY = jetBaseY + numJetSegments * 0.25f;
+        
+        auto spray = createCuboid(
+            glm::vec3(0.05f, 0.12f, 0.05f),
+            waterJetColor,
+            glm::vec3(x, topY, z)
+        );
+        fountainNode->AddChild(spray);
+        
+        // Store spray for animation
+        SchoolBuilder::WaterJet sprayData;
+        sprayData.node = spray;
+        sprayData.baseY = topY;
+        sprayData.amplitude = 0.15f;
+        sprayData.frequency = 4.0f;
+        sprayData.phaseOffset = i * 0.5f;
+        sprayData.initialTransform = spray->GetLocalTransform();
+        SchoolBuilder::s_waterJets.push_back(sprayData);
+    }
+    
+    // === TIER 1 WATER JETS (Small jets around edge) ===
+    for (int i = 0; i < 8; ++i) {
+        float angle = i * 45.0f;
+        float x = std::cos(glm::radians(angle)) * tier1Radius;
+        float z = std::sin(glm::radians(angle)) * tier1Radius;
+        
+        // Small water jet
+        auto smallJet = createCuboid(
+            glm::vec3(0.05f, 0.4f, 0.05f),
+            waterJetColor,
+            glm::vec3(x, tier1Y + 0.25f + 0.2f, z)
+        );
+        fountainNode->AddChild(smallJet);
+        
+        // Store for animation
+        SchoolBuilder::WaterJet smallJetData;
+        smallJetData.node = smallJet;
+        smallJetData.baseY = tier1Y + 0.25f + 0.2f;
+        smallJetData.amplitude = 0.08f;
+        smallJetData.frequency = 3.5f;
+        smallJetData.phaseOffset = i * 0.4f;
+        smallJetData.initialTransform = smallJet->GetLocalTransform();
+        SchoolBuilder::s_waterJets.push_back(smallJetData);
+    }
+    
+    // === TIER 2 WATER JETS (Smaller jets) ===
+    for (int i = 0; i < 6; ++i) {
+        float angle = i * 60.0f;
+        float x = std::cos(glm::radians(angle)) * tier2Radius;
+        float z = std::sin(glm::radians(angle)) * tier2Radius;
+        
+        // Tiny water jet
+        auto tinyJet = createCuboid(
+            glm::vec3(0.04f, 0.3f, 0.04f),
+            waterJetColor,
+            glm::vec3(x, tier2Y + 0.2f + 0.15f, z)
+        );
+        fountainNode->AddChild(tinyJet);
+        
+        // Store for animation
+        SchoolBuilder::WaterJet tinyJetData;
+        tinyJetData.node = tinyJet;
+        tinyJetData.baseY = tier2Y + 0.2f + 0.15f;
+        tinyJetData.amplitude = 0.06f;
+        tinyJetData.frequency = 4.0f;
+        tinyJetData.phaseOffset = i * 0.5f;
+        tinyJetData.initialTransform = tinyJet->GetLocalTransform();
+        SchoolBuilder::s_waterJets.push_back(tinyJetData);
+    }
+    
+    // === TOP ORNAMENT ===
+    float topY = tier3Y + 0.4f;
+    
+    // Top pedestal
+    auto topPedestal = createCuboid(
+        glm::vec3(0.3f, 0.5f, 0.3f),
+        marble,
+        glm::vec3(0.0f, topY, 0.0f)
+    );
+    fountainNode->AddChild(topPedestal);
+    
+    // Top ornament (decorative finial)
+    auto topOrnament = createCuboid(
+        glm::vec3(0.25f, 0.3f, 0.25f),
+        bronze,
+        glm::vec3(0.0f, topY + 0.4f, 0.0f)
+    );
+    fountainNode->AddChild(topOrnament);
+    
+    // Top sphere
+    auto topSphere = createCuboid(
+        glm::vec3(0.2f, 0.2f, 0.2f),
+        bronze,
+        glm::vec3(0.0f, topY + 0.65f, 0.0f)
+    );
+    fountainNode->AddChild(topSphere);
+    
+    // === CENTRAL SUPPORT COLUMNS ===
+    // Column from pool to tier 1
+    auto column1 = createCuboid(
+        glm::vec3(0.4f, tier1Y - poolHeight - 0.3f, 0.4f),
+        stoneGray,
+        glm::vec3(0.0f, poolHeight + (tier1Y - poolHeight - 0.3f)/2.0f, 0.0f)
+    );
+    fountainNode->AddChild(column1);
+    
+    // Column from tier 1 to tier 2
+    auto column2 = createCuboid(
+        glm::vec3(0.3f, tier2Y - tier1Y - 0.25f, 0.3f),
+        stoneGray,
+        glm::vec3(0.0f, tier1Y + 0.25f + (tier2Y - tier1Y - 0.25f)/2.0f, 0.0f)
+    );
+    fountainNode->AddChild(column2);
+    
+    // Column from tier 2 to tier 3
+    auto column3 = createCuboid(
+        glm::vec3(0.2f, tier3Y - tier2Y - 0.2f, 0.2f),
+        stoneGray,
+        glm::vec3(0.0f, tier2Y + 0.2f + (tier3Y - tier2Y - 0.2f)/2.0f, 0.0f)
+    );
+    fountainNode->AddChild(column3);
+    
+    // Decorative bands on columns
+    for (int i = 0; i < 3; ++i) {
+        float bandY = poolHeight + 0.5f + i * 0.5f;
+        auto band = createCuboid(
+            glm::vec3(0.45f, 0.06f, 0.45f),
+            bronze,
+            glm::vec3(0.0f, bandY, 0.0f)
+        );
+        fountainNode->AddChild(band);
+    }
+    
+    // === WATER JETS SECTION REMOVED ===
+    // Fountain now displays only the decorative structure without water effects
+    
+    // === ADDITIONAL DECORATIVE ELEMENTS ===
+    
+    // Decorative carvings on pool rim
+    for (int i = 0; i < 8; ++i) {
+        float angle = i * 45.0f + 22.5f; // Offset from edge ornaments
+        float x = std::cos(glm::radians(angle)) * (poolRadius - 0.1f);
+        float z = std::sin(glm::radians(angle)) * (poolRadius - 0.1f);
+        
+        auto carving = createCuboid(
+            glm::vec3(0.2f, 0.08f, 0.08f),
+            bronze,
+            glm::vec3(x, poolHeight - 0.04f, z)
+        );
+        fountainNode->AddChild(carving);
+    }
+    
+    // Decorative medallions on tier basins
+    for (int tier = 0; tier < 3; ++tier) {
+        float tierY = (tier == 0) ? tier1Y : (tier == 1) ? tier2Y : tier3Y;
+        float tierRadius = (tier == 0) ? tier1Radius : (tier == 1) ? tier2Radius : tier3Radius;
+        int numMedallions = (tier == 0) ? 4 : (tier == 1) ? 4 : 4;
+        
+        for (int i = 0; i < numMedallions; ++i) {
+            float angle = i * (360.0f / numMedallions);
+            float x = std::cos(glm::radians(angle)) * (tierRadius * 0.9f);
+            float z = std::sin(glm::radians(angle)) * (tierRadius * 0.9f);
+            
+            auto medallion = createCuboid(
+                glm::vec3(0.1f, 0.1f, 0.03f),
+                bronze,
+                glm::vec3(x, tierY + 0.05f, z)
+            );
+            fountainNode->AddChild(medallion);
+        }
+    }
+    
+    // Decorative scrollwork on tier rims
+    for (int i = 0; i < 4; ++i) {
+        float angle = i * 90.0f;
+        
+        // Tier 1 scrollwork
+        float x1 = std::cos(glm::radians(angle)) * (tier1Radius + 0.15f);
+        float z1 = std::sin(glm::radians(angle)) * (tier1Radius + 0.15f);
+        auto scroll1 = createCuboid(
+            glm::vec3(0.08f, 0.12f, 0.08f),
+            bronze,
+            glm::vec3(x1, tier1Y + 0.2f, z1)
+        );
+        fountainNode->AddChild(scroll1);
+        
+        // Tier 2 scrollwork
+        float x2 = std::cos(glm::radians(angle)) * (tier2Radius + 0.1f);
+        float z2 = std::sin(glm::radians(angle)) * (tier2Radius + 0.1f);
+        auto scroll2 = createCuboid(
+            glm::vec3(0.06f, 0.1f, 0.06f),
+            bronze,
+            glm::vec3(x2, tier2Y + 0.15f, z2)
+        );
+        fountainNode->AddChild(scroll2);
+    }
+    
+    return fountainNode;
 }
 
 // Helper to create a stone bench
@@ -2513,6 +3498,39 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
         s_people.push_back(person6);
     }
     
+    // -- Decorative Statue --
+    {
+        auto statue = createStatue();
+        // Position in left front corner near perimeter wall, scaled up for prominence
+        glm::mat4 statueTransform = glm::mat4(1.0f);
+        statueTransform = glm::translate(statueTransform, glm::vec3(-28.0f, 0.0f, 18.0f)); // Moved to corner
+        statueTransform = glm::scale(statueTransform, glm::vec3(2.0f, 2.0f, 2.0f)); // Even larger (2x)
+        statue->SetLocalTransform(statueTransform);
+        schoolParams->AddChild(statue);
+    }
+    
+    // -- Decorative Fountain --
+    {
+        auto fountain = createFountain();
+        // Position in right front corner (opposite from statue) - ENLARGED
+        glm::mat4 fountainTransform = glm::mat4(1.0f);
+        fountainTransform = glm::translate(fountainTransform, glm::vec3(28.0f, 0.0f, 18.0f)); // Mirror position
+        fountainTransform = glm::scale(fountainTransform, glm::vec3(2.5f, 2.5f, 2.5f)); // Larger: 2.5x scale
+        fountain->SetLocalTransform(fountainTransform);
+        schoolParams->AddChild(fountain);
+    }
+    
+    // -- Light Control Panel --
+    {
+        auto controlPanel = createControlPanel();
+        // Position near gate, on the right side (facing outward)
+        glm::mat4 panelTransform = glm::mat4(1.0f);
+        panelTransform = glm::translate(panelTransform, glm::vec3(5.0f, 0.0f, 22.0f)); // Right of gate
+        // No rotation - facing outward toward camera
+        controlPanel->SetLocalTransform(panelTransform);
+        schoolParams->AddChild(controlPanel);
+    }
+    
     // -- Clouds in the Sky --
     {
         // Cloud 1 (very high, very large) - Directly overhead
@@ -2623,6 +3641,109 @@ SceneNode::Ptr SchoolBuilder::s_clock;
 // Static clouds for animation
 std::vector<SceneNode::Ptr> SchoolBuilder::s_clouds;
 
+// Static birds for animation
+std::vector<SceneNode::Ptr> SchoolBuilder::s_birds;
+
+// Static flag parts
+std::vector<SchoolBuilder::FlagPart> SchoolBuilder::s_flagParts;
+
+
+// Update bird animation
+void SchoolBuilder::updateBirdAnimation(SceneNode::Ptr root, float time)
+{
+    float speed = 2.0f;
+    float radius = 15.0f;
+    float height = 12.0f;
+    
+    for (size_t i = 0; i < s_birds.size(); ++i)
+    {
+        auto bird = s_birds[i];
+        
+        // Circular motion
+        float angle = time * 0.5f + i * (6.28f / s_birds.size());
+        float x = std::sin(angle) * radius;
+        float z = std::cos(angle) * radius;
+        float y = height + std::sin(time * 1.5f + i) * 1.0f; // Bob up and down
+        
+        // Orientation (face direction of movement)
+        // Tangent to circle is (-z, x)
+        float rotAngle = angle - 1.57f; // -90 degrees
+        
+        glm::mat4 t(1.0f);
+        t = glm::translate(t, glm::vec3(x, y, z));
+        t = glm::rotate(t, rotAngle, glm::vec3(0.0f, 1.0f, 0.0f));
+        t = glm::scale(t, glm::vec3(0.5f)); // Scale down the bird
+        
+        bird->SetLocalTransform(t);
+        
+        // Wing flapping
+        if (bird->children.size() >= 2) {
+            float flap = std::sin(time * 15.0f);
+            float wingAngle = flap * 0.5f; // +/- 0.5 radians (approx 30 deg)
+            
+            // Left wing (child 1)
+            auto leftWing = bird->children[1];
+            glm::mat4 lw(1.0f);
+            lw = glm::translate(lw, glm::vec3(-0.2f, 0.0f, 0.0f));
+            lw = glm::rotate(lw, wingAngle, glm::vec3(0.0f, 0.0f, 1.0f));
+            lw = glm::translate(lw, glm::vec3(-0.5f, 0.0f, 0.0f)); // Pivot correction
+            lw = glm::scale(lw, glm::vec3(1.0f, 0.1f, 0.5f));
+            leftWing->SetLocalTransform(lw);
+            
+            // Right wing (child 2)
+            auto rightWing = bird->children[2];
+            glm::mat4 rw(1.0f);
+            rw = glm::translate(rw, glm::vec3(0.2f, 0.0f, 0.0f));
+            rw = glm::rotate(rw, -wingAngle, glm::vec3(0.0f, 0.0f, 1.0f));
+            rw = glm::translate(rw, glm::vec3(0.5f, 0.0f, 0.0f)); // Pivot correction
+            rw = glm::scale(rw, glm::vec3(1.0f, 0.1f, 0.5f));
+            rightWing->SetLocalTransform(rw);
+        }
+    }
+}
+
+// Update flag animation
+void SchoolBuilder::updateFlagAnimation(SceneNode::Ptr root, float time)
+{
+    float amplitude = 0.25f; // Wave height
+    float frequency = 2.0f;  // Wave density
+    float speed = 5.0f;      // Wave speed
+    
+    for (auto& part : SchoolBuilder::s_flagParts)
+    {
+        // Calculate wave Z offset based on X position
+        // Wave moves away from pole: (x * freq - time * speed)
+        float z = amplitude * std::sin(part.xOffset * frequency - time * speed);
+        
+        // Create translation matrix for the offset
+        glm::mat4 offsetMat = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, z));
+        
+        // Apply offset to initial transform
+        // We apply offset * initial because we want to perturb the existing position
+        // Note: initialTransform is Local to the flagpole
+        part.node->SetLocalTransform(offsetMat * part.initialTransform);
+    }
+}
+
+// Static water jets for fountain animation
+std::vector<SchoolBuilder::WaterJet> SchoolBuilder::s_waterJets;
+
+// Update fountain water animation
+void SchoolBuilder::updateFountainAnimation(SceneNode::Ptr root, float time)
+{
+    for (auto& jet : SchoolBuilder::s_waterJets)
+    {
+        // Calculate oscillating Y offset (water pulsing up and down)
+        float yOffset = jet.amplitude * std::sin(time * jet.frequency + jet.phaseOffset);
+        
+        // Create translation matrix for the offset
+        glm::mat4 offsetMat = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, yOffset, 0.0f));
+        
+        // Apply offset to initial transform
+        jet.node->SetLocalTransform(offsetMat * jet.initialTransform);
+    }
+}
+    
 // Update people animation
 void SchoolBuilder::updatePeopleAnimation(SceneNode::Ptr root, float time)
 {
@@ -2812,102 +3933,4 @@ void SchoolBuilder::updateCloudAnimation(SceneNode::Ptr root, float time)
     }
 }
 
-// Static birds for animation
-std::vector<SceneNode::Ptr> SchoolBuilder::s_birds;
 
-// Update bird animation
-void SchoolBuilder::updateBirdAnimation(SceneNode::Ptr root, float time)
-{
-    if (s_birds.empty()) return;
-    
-    float birdSpeed = 2.0f;
-    float circleRadius = 5.0f;
-    
-    for (size_t i = 0; i < s_birds.size(); ++i)
-    {
-        glm::mat4 t = s_birds[i]->GetLocalTransform();
-        glm::vec3 pos = glm::vec3(t[3]);
-        
-        // Simple circling or bobbing movement
-        float offsetX = std::cos(time * 0.5f + i) * 0.05f; 
-        float offsetY = std::sin(time * 1.0f + i) * 0.05f;
-        float offsetZ = std::sin(time * 0.3f + i) * 0.05f; // Slight forward/back
-        
-        pos.x += offsetX;
-        pos.y += offsetY;
-        pos.z += offsetZ;
-        
-        // Also rotate them slightly to face movement direction if we wanted complex physics, 
-        // but for ambient birds, small bobbing is enough to look alive.
-        
-        // Apply transform
-        t = glm::translate(glm::mat4(1.0f), pos);
-        
-        // Add a little flap rotation (wobble)
-        float flap = std::sin(time * 10.0f + i) * 5.0f; // Rapid flap
-        t = glm::rotate(t, glm::radians(flap), glm::vec3(0.0f, 0.0f, 1.0f)); // Banking
-        
-        // Keep original orientation somewhat? We just rebuilt T from identity, lost original rotation.
-        // It's better to update the existing matrix if we want to separate position update.
-        // But here we just set position. Re-applying basic rotation:
-        // Birds face generally forward (-Z or +X depending on flock)
-        // Let's just make them face consistent direction for now or reuse existing rotation from previous frame?
-        // Re-using existing rotation is hard if we rebuild matrix.
-        // Let's just drift them. The 'createBird' adds wing rotation relative to body.
-        
-        // Simplified: just update position in existing matrix?
-        // SceneNode transform is local.
-        // Let's just create new matrix with current pos + slight offset.
-        
-         // Reset rotational components for banking effect 
-         // Assume birds face generally -Z (default) or we need to know their heading.
-         // Let's just translate the EXISTING matrix instead of rebuilding.
-         
-         // Actually, simple way: modify the position columns of the matrix directly.
-         // t[3][0] += offsetX; ...
-         // But SceneNode encapsulation prefers SetLocalTransform.
-         
-         // Let's stick to the subtle drift added to current position.
-         // But we need to avoid "walking" away infinitely.
-         // We calculated offset from TIME, so we need Base Position.
-         // Like clouds, we need original positions.
-         // For simplicity: just bob in place relative to where they current are? 
-         // No, time-based offset from *initial* position is best.
-         // But we don't store initial positions easily here without a struct.
-         
-         // Alternative: small delta movement each frame?
-         // pos += delta. 
-         // Yes, pos.x += offsetX is delta if offsetX is small? No, offsetX is sine wave result.
-         // We are adding sine result to current pos? That would accelerate back and forth!
-         
-         // Correct way without storing state:
-         // Just use sine wave for visual fluff, don't accumulate.
-         // But we need base position.
-         // Let's assume the previous position was close to base.
-         // Or just define trajectories like clouds.
-         
-         // Let's do a simple circular path for all birds around a center point?
-         // Or linear flight.
-         
-         // Let's implement simple LINEAR flight with wrap-around.
-         
-         float speed = 2.5f;
-         pos.z -= speed * 0.016f; // Fly forward (-Z)
-         pos.y += std::sin(time * 3.0f + i) * 0.02f; // Bob up down
-         
-         // Reset if too far
-         if (pos.z < -60.0f) pos.z = 20.0f;
-         
-         // Rebuild matrix to maintain orientation
-         t = glm::translate(glm::mat4(1.0f), pos);
-         // Rotate 180 to face camera if moving -Z matches face? 
-         // Actually createBird makes them face +Z? No, usually +Z is "back".
-         // Let's assume they face -Z (standard).
-         
-         // Add banking/flapping
-         float bank = std::sin(time * 5.0f + i) * 10.0f;
-         t = glm::rotate(t, glm::radians(bank), glm::vec3(0.0f, 0.0f, 1.0f));
-         
-         s_birds[i]->SetLocalTransform(t);
-    }
-}

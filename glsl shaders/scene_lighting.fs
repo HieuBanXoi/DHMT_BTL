@@ -37,12 +37,22 @@ uniform float sunIntensity;
 // Scene center (world-space). If your scene center is at origin, set to vec3(0.0).
 uniform vec3 sceneCenter;
 
+// === NEW: Sun and Moon Directional Lights ===
+// These lights move with the sun/moon to simulate emission
+uniform vec3 sunLightDirection;
+uniform vec3 sunLightColor;
+uniform float sunLightIntensity;
+
+uniform vec3 moonLightDirection;
+uniform vec3 moonLightColor;
+uniform float moonLightIntensity;
+
 // Simple material / ambient parameters for demonstration
 uniform vec3 ambientColor;
 uniform vec3 albedo;
 
 // Point lights (streetlights)
-#define MAX_POINT_LIGHTS 16
+#define MAX_POINT_LIGHTS 20
 uniform int numPointLights;
 uniform PointLight pointLights[MAX_POINT_LIGHTS];
 
@@ -61,6 +71,17 @@ DirectionalLight CreateDirectionalLightFromSun(mat4 sunModelMatrix, vec3 center)
     light.color = sunColor;
     light.intensity = sunIntensity;
     return light;
+}
+
+// Calculate directional light contribution
+vec3 CalculateDirectionalLight(vec3 direction, vec3 color, float intensity, vec3 normal, vec3 albedoColor)
+{
+    // Diffuse term (Lambert)
+    float NdotL = max(dot(normal, direction), 0.0);
+    
+    vec3 diffuse = color * intensity * NdotL * albedoColor;
+    
+    return diffuse;
 }
 
 // Calculate point light contribution with stronger attenuation for localized effect
@@ -98,6 +119,12 @@ void main()
     vec3 ambient = ambientColor * albedo;
 
     vec3 color = ambient + diffuse;
+    
+    // === ADD SUN DIRECTIONAL LIGHT ===
+    color += CalculateDirectionalLight(sunLightDirection, sunLightColor, sunLightIntensity, N, albedo);
+    
+    // === ADD MOON DIRECTIONAL LIGHT ===
+    color += CalculateDirectionalLight(moonLightDirection, moonLightColor, moonLightIntensity, N, albedo);
     
     // Add point light contributions (streetlights)
     for (int i = 0; i < numPointLights && i < MAX_POINT_LIGHTS; ++i)
