@@ -8,10 +8,16 @@
 #include <stdexcept>
 #include <memory>
 
-#include "Camera.h"
+#include <glm/gtc/type_ptr.hpp>
+
 #include "Shader.h"
+#include "Camera.h"
+#include "SceneNode.h"
+#include "Player.h"
+#include "Collision.h"
 #include "GLUtils.h"
 #include "SchoolBuilder.h"
+#include "ParticleSystem.h" // Add Particle System
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -22,10 +28,14 @@ static void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 }
 
 // Globals for mouse handling and camera integration
-static Camera g_camera(glm::vec3(0.0f, 15.0f, 50.0f)); // Very high and far - panoramic view
+static Player g_player(glm::vec3(0.0f, 1.7f, 40.0f)); // Start OUTSIDE gate (Z=40)
+// static Camera g_camera(glm::vec3(0.0f, 15.0f, 50.0f)); // OLD Camera
 static bool g_firstMouse = true;
 static float g_lastX = 1280.0f / 2.0f;
 static float g_lastY = 720.0f / 2.0f;
+
+// Tooltip state
+static int g_hoveredButtonId = -1;
 
 // Light control
 static bool g_lightsEnabled = true;
@@ -61,7 +71,7 @@ static void mouse_callback(GLFWwindow* /*window*/, double xpos, double ypos)
     g_lastX = xf;
     g_lastY = yf;
 
-    g_camera.ProcessMouseMovement(xoffset, yoffset);
+    g_player.ProcessMouseMovement(xoffset, yoffset);
 }
 
 // Ray-AABB intersection test
@@ -99,7 +109,7 @@ static void mouse_button_callback(GLFWwindow* window, int button, int action, in
         
         // Create ray from camera through screen center
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)width / (float)height, 0.1f, 200.0f);
-        glm::mat4 view = g_camera.GetViewMatrix();
+        glm::mat4 view = g_player.GetViewMatrix();
         
         glm::vec4 rayClip = glm::vec4(x, y, -1.0f, 1.0f);
         glm::vec4 rayEye = glm::inverse(projection) * rayClip;
@@ -107,7 +117,7 @@ static void mouse_button_callback(GLFWwindow* window, int button, int action, in
         glm::vec3 rayWorld = glm::vec3(glm::inverse(view) * rayEye);
         rayWorld = glm::normalize(rayWorld);
         
-        glm::vec3 rayOrigin = g_camera.GetPosition();
+        glm::vec3 rayOrigin = g_player.GetPosition();
         
         // Check intersection with control panel buttons
         float closestT = FLT_MAX;
@@ -142,21 +152,82 @@ static void mouse_button_callback(GLFWwindow* window, int button, int action, in
             g_lightBrightness = std::max(0.0f, g_lightBrightness - 0.1f);
             std::cout << "[Crosshair Click] - Button: Brightness " << (int)(g_lightBrightness * 100) << "%" << std::endl;
         }
+        else if (hitButton == 4) // GATE LEVER
+        {
+            SchoolBuilder::s_isGateOpen = !SchoolBuilder::s_isGateOpen;
+            std::cout << "[Crosshair Click] Lever: Gate " << (SchoolBuilder::s_isGateOpen ? "OPENING" : "CLOSING") << std::endl;
+        }
     }
 }
 
-// Process keyboard input for WASD movement using Camera::Movement
-static void processKeyboardInput(GLFWwindow* window, float deltaTime)
+// Function to check what the player is looking at (Update every frame)
+static void CheckHover(GLFWwindow* window)
 {
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        g_camera.ProcessKeyboard(Camera::Movement::Forward, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        g_camera.ProcessKeyboard(Camera::Movement::Backward, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        g_camera.ProcessKeyboard(Camera::Movement::Left, deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        g_camera.ProcessKeyboard(Camera::Movement::Right, deltaTime);
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
     
+    // Ray from center
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)width / (float)height, 0.1f, 200.0f);
+    glm::mat4 view = g_player.GetViewMatrix();
+    
+    glm::vec4 rayClip = glm::vec4(0.0f, 0.0f, -1.0f, 1.0f);
+    glm::vec4 rayEye = glm::inverse(projection) * rayClip;
+    rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
+    glm::vec3 rayWorld = glm::vec3(glm::inverse(view) * rayEye);
+    rayWorld = glm::normalize(rayWorld);
+    
+    glm::vec3 rayOrigin = g_player.GetPosition();
+    
+    float closestT = 5.0f; // Max reach distance (5 meters)
+    int hitButton = -1;
+    
+    for (const auto& button : g_controlPanelButtons)
+    {
+        float t;
+        if (rayAABBIntersection(rayOrigin, rayWorld, button.min, button.max, t))
+        {
+            if (t < closestT)
+            {
+                closestT = t;
+                hitButton = button.buttonId;
+            }
+        }
+    }
+    
+    g_hoveredButtonId = hitButton;
+}
+
+// Helper to collect AABBs from the scene graph
+static void CollectColliders(const SceneNode::Ptr& node, std::vector<AABB>& boxes, const std::vector<SceneNode::Ptr>& excludedNodes) {
+    if (!node) return;
+    
+    // Check exclusion
+    for (const auto& excluded : excludedNodes) {
+        if (node == excluded) return;
+    }
+
+    if (auto meshNode = std::dynamic_pointer_cast<MeshNode>(node)) {
+        // Only collide with Cubes (walls, posts)
+        if (meshNode->mesh == MeshType::Cube) {
+             AABB box = GetAABBFromTransform(meshNode->GetGlobalTransform());
+             // Filter small objects (leaves, thin frames, etc) if needed
+             // For now, only ignore very thin things if they are not walls
+             glm::vec3 size = box.max - box.min;
+             // If volume is tiny?
+             if (size.x > 0.05f && size.y > 0.05f && size.z > 0.05f) {
+                 boxes.push_back(box);
+             }
+        }
+    }
+    
+    for (auto& child : node->children) {
+        CollectColliders(child, boxes, excludedNodes);
+    }
+}
+
+// Process keyboard input (Lighting only - movement handled by Player)
+static void processLightingInput(GLFWwindow* window)
+{
     // Toggle lights with L key
     if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS)
     {
@@ -348,8 +419,40 @@ int main() {
     g_controlPanelButtons.push_back({glm::vec3(pXform * glm::vec4(-0.125f, 0.475f, 0.0f, 1.0f)), glm::vec3(pXform * glm::vec4(0.125f, 0.725f, 0.18f, 1.0f)), 2});
     g_controlPanelButtons.push_back({glm::vec3(pXform * glm::vec4(-0.125f, 0.125f, 0.0f, 1.0f)), glm::vec3(pXform * glm::vec4(0.125f, 0.375f, 0.18f, 1.0f)), 3});
     
+    // Add Lever Button Bounds (Approx box around lever handle)
+    // Lever is at (-8.0, 0, 32), handle is 0.6m high
+    g_controlPanelButtons.push_back({
+        glm::vec3(-8.2f, 0.0f, 31.8f), 
+        glm::vec3(-7.8f, 1.0f, 32.2f), 
+        4 // ID 4 = Lever
+    });
+
+    // --- PARTICLE SYSTEM SETUP ---
+    // Use absolute paths to avoid CWD issues
+    Shader particleShader("D:/HocTap/DHMT/BTL/glsl shaders/particle.vs", "D:/HocTap/DHMT/BTL/glsl shaders/particle.fs");
+    ParticleSystem fountainParticles(1000); // 1000 particles
+    // Spawn at fountain top: (28.0, 6.8, 18.0)
+    fountainParticles.SpawnPosition = glm::vec3(28.0f, 6.8f, 18.0f);
+    
+    // Disable default water jets blocks to avoid visual clash?
+    // We can keep them as "core" water, and particles are "spray".
+    
     // Increase camera movement speed
-    g_camera.MovementSpeed = 8.0f; // Faster movement
+    // Increase camera movement speed - handled by Player internally now
+    // g_camera.MovementSpeed = 8.0f; 
+
+    // Collect colliders from scene (STATIC WORLD ONLY)
+    std::vector<AABB> staticWorldColliders;
+    
+    // Identify door nodes to exclude from static collision
+    std::vector<SceneNode::Ptr> excludedDoorNodes;
+    for (const auto& door : SchoolBuilder::s_doors) {
+        excludedDoorNodes.push_back(door.node);
+    }
+    
+    CollectColliders(root, staticWorldColliders, excludedDoorNodes);
+    std::cout << "Collected " << staticWorldColliders.size() << " static collider boxes." << std::endl;
+
 
     // Timing variables for delta time
     float lastFrame = 0.0f;
@@ -374,8 +477,75 @@ int main() {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
 
-        // Forward keyboard movement to camera
-        processKeyboardInput(window, deltaTime);
+        // Update global transforms for correct collision/interaction
+        root->updateGlobalTransform();
+
+        // --- DYNAMIC COLLISION SETUP ---
+        // Combine static world with current closed doors
+        std::vector<AABB> currentFrameColliders = staticWorldColliders;
+        
+        // Add CLOSED doors to collision list
+        for (const auto& door : SchoolBuilder::s_doors) {
+            // Treat as solid if closed or barely open (< 45 degrees)
+            if (std::abs(door.currentAngle) < 45.0f) {
+                 for (auto& child : door.node->children) {
+                     if (auto mesh = std::dynamic_pointer_cast<MeshNode>(child)) {
+                         // Get world-space AABB of the door leaf/knob
+                         AABB childBox = GetAABBFromTransform(mesh->GetGlobalTransform());
+                         currentFrameColliders.push_back(childBox);
+                     }
+                 }
+            }
+        }
+        
+        // Add CLOSED GATE to collision list
+        if (!SchoolBuilder::s_isGateOpen) {
+            // Gate is at Z = 30.0, spanning X from -5 to +5 (10m total width)
+            // Height: 3m, Thickness: ~0.1m
+            AABB leftGateBox;
+            leftGateBox.min = glm::vec3(-5.0f, 0.0f, 29.95f);
+            leftGateBox.max = glm::vec3(0.0f, 3.0f, 30.05f);
+            currentFrameColliders.push_back(leftGateBox);
+            
+            AABB rightGateBox;
+            rightGateBox.min = glm::vec3(0.0f, 0.0f, 29.95f);
+            rightGateBox.max = glm::vec3(5.0f, 3.0f, 30.05f);
+            currentFrameColliders.push_back(rightGateBox);
+        }
+
+        // Toggle Door (Mouse Click when near)
+        static bool mousePressedLast = false;
+        bool mousePressed = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+        
+        // Check for interaction (extended distance)
+        float interactionDist = 4.0f; 
+        SchoolBuilder::Door* nearestDoor = nullptr;
+        float minDist = interactionDist;
+        
+        for (auto& door : SchoolBuilder::s_doors) {
+            // Get global position of the door hinge
+            glm::vec3 doorPos = glm::vec3(door.node->GetGlobalTransform()[3]);
+            float dist = glm::distance(g_player.GetPosition(), doorPos);
+            if (dist < minDist) {
+                minDist = dist;
+                nearestDoor = &door;
+            }
+        }
+        
+        // Interaction Logic
+        if (nearestDoor && mousePressed && !mousePressedLast) {
+            nearestDoor->isOpen = !nearestDoor->isOpen;
+            nearestDoor->targetAngle = nearestDoor->isOpen ? nearestDoor->openAngle : 0.0f;
+        }
+        mousePressedLast = mousePressed;
+
+        // Forward keyboard movement to player controller
+        g_player.ProcessInputs(window, deltaTime, currentFrameColliders);
+        processLightingInput(window); // Separate lighting keys
+
+        
+        // Update Hover State
+        CheckHover(window);
 
         // Start ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
@@ -415,6 +585,38 @@ int main() {
         ImGui::End();
 
         // Render
+        // Render Tooltip if hovering over interactive element
+        if (g_hoveredButtonId != -1)
+        {
+            // Center tooltip
+            ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2.0f, ImGui::GetIO().DisplaySize.y / 2.0f + 30.0f), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+            ImGui::SetNextWindowBgAlpha(0.6f); // Transparent background
+            ImGui::Begin("Tooltip", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+            
+            if (g_hoveredButtonId == 1) ImGui::Text("Light Switch (Toggle ON/OFF)");
+            else if (g_hoveredButtonId == 2) ImGui::Text("Increase Brightness (+)");
+            else if (g_hoveredButtonId == 3) ImGui::Text("Decrease Brightness (-)");
+            else if (g_hoveredButtonId == 4) ImGui::Text("Gate Lever (Click to Toggle)");
+            
+            ImGui::End();
+        }
+        
+        // Door Interaction Prompt
+        // Use the same nearestDoor logic (re-calculated or cached? Re-calc is cheap)
+        interactionDist = 3.0f;
+        for (auto& door : SchoolBuilder::s_doors) {
+            glm::vec3 doorPos = glm::vec3(door.node->GetGlobalTransform()[3]);
+            float dist = glm::distance(g_player.GetPosition(), doorPos);
+            if (dist < interactionDist) {
+                 ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2.0f, ImGui::GetIO().DisplaySize.y / 2.0f + 60.0f), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+                 ImGui::SetNextWindowBgAlpha(0.6f);
+                 ImGui::Begin("DoorPrompt", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+                 ImGui::Text("Click chuot trai de %s Cua", door.isOpen ? "Dong" : "Mo");
+                 ImGui::End();
+                 break; // Only show for one
+            }
+        }
+
         ImGui::Render();
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -426,7 +628,7 @@ int main() {
         // Use scene shader and set global uniforms
         sceneShader.Use();
 
-        glm::mat4 view = g_camera.GetViewMatrix();
+        glm::mat4 view = g_player.GetViewMatrix();
         glm::mat4 projection = glm::perspective(glm::radians(45.0f),
                                                 display_w > 0 ? static_cast<float>(display_w) / static_cast<float>(display_h) : 1.0f,
                                                 0.1f, 100.0f);
@@ -439,18 +641,18 @@ int main() {
         float speed = 0.1f; // Even slower for realism
         float angle = currentFrame * speed;
         
-        // Sun position - vertical orbit (Y changes, X stays fixed)
-        // Orbit in YZ plane instead of XZ plane
-        float sunX = 0.0f; // Fixed X position
+        // Sun position - vertical orbit (Y changes, Z stays fixed)
+        // Orbit in XY plane instead of YZ plane
+        float sunX = orbitRadius * cos(angle); // X goes left/right
         float sunY = orbitRadius * sin(angle); // Y goes up and down
-        float sunZ = orbitRadius * cos(angle); // Z goes forward/back
+        float sunZ = 0.0f; // Fixed Z position
         glm::vec3 sunPos = glm::vec3(sunX, sunY, sunZ);
         glm::mat4 sunModel = glm::translate(glm::mat4(1.0f), sunPos);
         
         // Moon position (opposite side)
+        float moonX = orbitRadius * cos(angle + 3.14159f);
         float moonY = orbitRadius * sin(angle + 3.14159f);
-        float moonZ = orbitRadius * cos(angle + 3.14159f);
-        glm::vec3 moonPos = glm::vec3(sunX, moonY, moonZ);
+        glm::vec3 moonPos = glm::vec3(moonX, moonY, sunZ);
         glm::mat4 moonModel = glm::translate(glm::mat4(1.0f), moonPos);
 
         // Determine day/night based on sun Y position
@@ -468,48 +670,48 @@ int main() {
         // Adjust ambient light based on time of day (more dramatic difference)
         glm::vec3 ambientColor;
         if (isDay) {
-            ambientColor = glm::vec3(0.4f, 0.4f, 0.45f); // Bright ambient during day
+            ambientColor = glm::vec3(0.0015f, 0.0015f, 0.002f); // 10x darker (Day)
         } else {
-            ambientColor = glm::vec3(0.1f, 0.1f, 0.15f); // Brighter at night (was 0.02)
+            ambientColor = glm::vec3(0.00008f, 0.00008f, 0.0001f); // 10x darker (Night)
         }
         sceneShader.SetVec3("ambientColor", ambientColor);
         
         // === DIRECTIONAL LIGHTS FROM SUN AND MOON ===
         // These lights move with the sun/moon to simulate them emitting light
         
-        // Sun directional light (only active during day) - Softer intensity
-        glm::vec3 sunLightDir = glm::normalize(-sunPos); // Direction FROM sun TO scene
+        // Sun directional light (only active during day) - Increased intensity for visibility
+        glm::vec3 sunLightDir = -glm::normalize(sunPos); // Direction FROM sun (negative to shine downward)
         glm::vec3 sunLightColor = glm::vec3(1.0f, 0.95f, 0.8f); // Warm yellow-white
-        float sunLightIntensity = isDay ? (3.0f * (sunY / orbitRadius)) : 0.0f; // Reduced to 3x for softer light
+        float sunLightIntensity = isDay ? (2.5f * (sunY / orbitRadius)) : 0.0f; // Increased from 1.001 to 2.5
         
         sceneShader.SetVec3("sunLightDirection", sunLightDir);
         sceneShader.SetVec3("sunLightColor", sunLightColor);
         sceneShader.SetFloat("sunLightIntensity", sunLightIntensity);
         
-        // Moon directional light (only active at night) - EXTREMELY BRIGHT
-        glm::vec3 moonLightDir = glm::normalize(-moonPos); // Direction FROM moon TO scene
+        // Moon directional light (only active at night) - Increased intensity for visibility
+        glm::vec3 moonLightDir = -glm::normalize(moonPos); // Direction FROM moon (negative to shine downward)
         glm::vec3 moonLightColor = glm::vec3(0.7f, 0.8f, 1.0f); // Cool blue-white
-        float moonLightIntensity = !isDay ? (5.0f * (moonY / orbitRadius)) : 0.0f; // 5x intensity!
+        float moonLightIntensity = !isDay ? (2.5f * (moonY / orbitRadius)) : 0.0f; // Increased from 1.001 to 2.5
         
         sceneShader.SetVec3("moonLightDirection", moonLightDir);
         sceneShader.SetVec3("moonLightColor", moonLightColor);
         sceneShader.SetFloat("moonLightIntensity", moonLightIntensity);
         
-        // Set up all point lights: 6 central + 6 perimeter + 3 statue + 3 fountain + 4 corners = 22 total
+        // Set up all point lights: 10 central + 6 perimeter + 3 statue + 3 fountain + 4 corners = 26 total
         // Point lights are ALWAYS ON with constant brightness
-        int totalLights = 22;
+        int totalLights = 26;
         float lightHeight = 4.0f;
         sceneShader.SetInt("numPointLights", totalLights);
         
         // Light multiplier based on toggle state and brightness
         float lightMultiplier = g_lightsEnabled ? g_lightBrightness : 0.0f;
         
-        // Central pathway lights (6 lights in 3 symmetric pairs) - CONSTANT BRIGHTNESS
-        int numPairs = 3;
+        // Central pathway lights (10 lights in 5 symmetric pairs) - CONSTANT BRIGHTNESS
+        int numPairs = 5;
         float spacing = 7.0f;
         for (int i = 0; i < numPairs; ++i)
         {
-            float z = 14.0f - i * spacing;
+            float z = 28.0f - i * spacing; // Z positions: 28, 21, 14, 7, 0
             
             // Left light - ALWAYS 3.5 intensity
             std::string baseNameL = "pointLights[" + std::to_string(i * 2) + "]";
@@ -536,7 +738,7 @@ int main() {
         
         for (int i = 0; i < 6; ++i)
         {
-            std::string baseName = "pointLights[" + std::to_string(6 + i) + "]"; // Start from index 6
+            std::string baseName = "pointLights[" + std::to_string(10 + i) + "]"; // Start from index 10 (after 10 pathway lights)
             sceneShader.SetVec3(baseName + ".position", perimeterLightPositions[i]);
             sceneShader.SetVec3(baseName + ".color", glm::vec3(1.0f, 0.9f, 0.7f));
             sceneShader.SetFloat(baseName + ".intensity", 4.0f * lightMultiplier); // Toggle-able
@@ -552,7 +754,7 @@ int main() {
         
         for (int i = 0; i < 3; ++i)
         {
-            std::string baseName = "pointLights[" + std::to_string(12 + i) + "]"; // Start from index 12
+            std::string baseName = "pointLights[" + std::to_string(16 + i) + "]"; // Start from index 16 (after 10 pathway + 6 perimeter)
             sceneShader.SetVec3(baseName + ".position", statueLightPositions[i]);
             sceneShader.SetVec3(baseName + ".color", glm::vec3(1.0f, 0.95f, 0.8f)); // Warm golden light
             sceneShader.SetFloat(baseName + ".intensity", 5.0f * lightMultiplier); // Toggle-able
@@ -568,7 +770,7 @@ int main() {
         
         for (int i = 0; i < 3; ++i)
         {
-            std::string baseName = "pointLights[" + std::to_string(15 + i) + "]"; // Start from index 15
+            std::string baseName = "pointLights[" + std::to_string(19 + i) + "]"; // Start from index 19 (after statue)
             sceneShader.SetVec3(baseName + ".position", fountainLightPositions[i]);
             sceneShader.SetVec3(baseName + ".color", glm::vec3(0.7f, 0.9f, 1.0f)); // Cool blue-white water light
             sceneShader.SetFloat(baseName + ".intensity", 4.5f * lightMultiplier); // Toggle-able
@@ -584,7 +786,7 @@ int main() {
         
         for (int i = 0; i < 4; ++i)
         {
-            std::string baseName = "pointLights[" + std::to_string(18 + i) + "]"; // Start from index 18
+            std::string baseName = "pointLights[" + std::to_string(22 + i) + "]"; // Start from index 22 (after fountain)
             sceneShader.SetVec3(baseName + ".position", cornerLightPositions[i]);
             sceneShader.SetVec3(baseName + ".color", glm::vec3(1.0f, 0.9f, 0.7f)); // Warm white
             sceneShader.SetFloat(baseName + ".intensity", 5.0f * lightMultiplier); // Toggle-able, bright
@@ -605,8 +807,14 @@ int main() {
         // Update flag animation
         SchoolBuilder::updateFlagAnimation(root, currentFrame);
 
-        // Update fountain animation
-        SchoolBuilder::updateFountainAnimation(root, currentFrame);
+        // Update door animation
+        SchoolBuilder::updateDoorAnimation(deltaTime);
+
+
+
+
+        // Update Gate Animation
+        SchoolBuilder::updateGateAnimation(deltaTime);
 
         // Update global transforms if any dynamic transforms exist (static in our simple builder)
         root->updateGlobalTransform();
@@ -645,6 +853,20 @@ int main() {
                 glBindVertexArray(0);
             }
         }
+        
+        // --- DRAW PARTICLES ---
+        fountainParticles.Update(deltaTime, 10); // Spawn 10 particles per frame
+        
+        particleShader.Use();
+        particleShader.SetMat4("projection", projection);
+        particleShader.SetMat4("view", view);
+        particleShader.SetMat4("model", glm::mat4(1.0f));
+        particleShader.SetVec4("particleColor", glm::vec4(0.5f, 0.8f, 1.0f, 1.0f));
+        
+        // Enable Point Size
+        glEnable(GL_PROGRAM_POINT_SIZE);
+        fountainParticles.Draw();
+        glDisable(GL_PROGRAM_POINT_SIZE);
 
         // Render ImGui draw data
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

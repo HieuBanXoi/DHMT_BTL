@@ -76,22 +76,191 @@ static SceneNode::Ptr createWindow(float width, float height)
 }
 
 // Helper to create a door
-static SceneNode::Ptr createDoor(float width, float height)
+static SceneNode::Ptr createDoor(float width, float height, float openAngle = 90.0f)
 {
-    auto doorGroup = std::make_shared<SceneNode>();
+    // Root Node (Fixed position in wall)
+    auto doorRoot = std::make_shared<SceneNode>();
+    
+    // Hinge Node (Rotates)
+    auto doorHinge = std::make_shared<SceneNode>();
+    doorRoot->AddChild(doorHinge);
     
     glm::vec3 doorColor(0.4f, 0.25f, 0.1f); // Wood color
     glm::vec3 knobColor(0.8f, 0.7f, 0.2f);  // Brass
     
-    // Door Leaf
-    auto door = createCuboid(glm::vec3(width, height, 0.1f), doorColor, glm::vec3(0.0f, height/2.0f, 0.0f));
-    doorGroup->AddChild(door);
+    // Door Leaf (Offset so Hinge is at edge)
+    // Center of leaf is at (width/2, height/2, 0) relative to hinge
+    auto door = createCuboid(glm::vec3(width, height, 0.1f), doorColor, glm::vec3(width/2.0f, height/2.0f, 0.0f));
+    doorHinge->AddChild(door);
     
-    // Knob
-    auto knob = createCuboid(glm::vec3(0.1f, 0.1f, 0.15f), knobColor, glm::vec3(width * 0.35f, height * 0.5f, 0.0f));
-    doorGroup->AddChild(knob);
+    // Knob (Place knob on opposite side of hinge)
+    // If openAngle is positive (Standard, hinge Left), knob is on Right (width * 0.85)
+    // If openAngle is negative (Hinge Right/Rotated?), logic depends on usage.
+    // Standard usage: Hinge is always at (0,0,0) of local space.
+    // So knob is always at width * 0.85.
+    auto knob = createCuboid(glm::vec3(0.1f, 0.1f, 0.15f), knobColor, glm::vec3(width * 0.85f, height * 0.5f, 0.0f));
+    doorHinge->AddChild(knob);
     
-    return doorGroup;
+    // Register the HINGE node
+    SchoolBuilder::Door newDoor;
+    newDoor.node = doorHinge;
+    newDoor.currentAngle = 0.0f;
+    newDoor.targetAngle = 0.0f;
+    newDoor.openAngle = openAngle; // Store custom angle
+    newDoor.isOpen = false;
+    newDoor.isMoving = false;
+    SchoolBuilder::s_doors.push_back(newDoor);
+    
+    return doorRoot;
+}
+
+// Implement updateDoorAnimation
+void SchoolBuilder::updateDoorAnimation(float dt)
+{
+    float speed = 120.0f; 
+    for (auto& door : s_doors) {
+        if (std::abs(door.currentAngle - door.targetAngle) > 0.1f) {
+            if (door.currentAngle < door.targetAngle) {
+                door.currentAngle += speed * dt;
+                if (door.currentAngle > door.targetAngle) door.currentAngle = door.targetAngle;
+            } else {
+                door.currentAngle -= speed * dt;
+                if (door.currentAngle < door.targetAngle) door.currentAngle = door.targetAngle;
+            }
+            door.node->SetLocalTransform(glm::rotate(glm::mat4(1.0f), glm::radians(door.currentAngle), glm::vec3(0.0f, 1.0f, 0.0f)));
+        }
+    }
+}
+
+void SchoolBuilder::toggleDoor(const glm::vec3& playerPos, float maxDistance, const glm::vec3& forward)
+{
+    // Find nearest door
+    float minDist = maxDistance;
+    Door* nearest = nullptr;
+    
+    for (auto& door : s_doors) {
+        // Need global position. 
+        glm::vec3 doorPos = glm::vec3(door.node->GetGlobalTransform()[3]);
+        float dist = glm::distance(playerPos, doorPos);
+        if (dist < minDist) {
+            minDist = dist;
+            nearest = &door;
+        }
+    }
+    
+    if (nearest) {
+        nearest->isOpen = !nearest->isOpen;
+        nearest->targetAngle = nearest->isOpen ? 90.0f : 0.0f;
+    }
+}
+
+// --- FURNITURE HELPERS ---
+
+static SceneNode::Ptr createTable(float width, float depth, float height)
+{
+    auto table = std::make_shared<SceneNode>();
+    glm::vec3 woodColor(0.6f, 0.4f, 0.2f);
+    
+    // Tabletop
+    auto top = createCuboid(glm::vec3(width, 0.05f, depth), woodColor, glm::vec3(0.0f, height - 0.025f, 0.0f));
+    table->AddChild(top);
+    
+    // Legs
+    float legW = 0.05f;
+    glm::vec3 legPos(width/2.0f - legW/2.0f, height/2.0f, depth/2.0f - legW/2.0f);
+    
+    table->AddChild(createCuboid(glm::vec3(legW, height, legW), woodColor, glm::vec3(legPos.x, height/2.0f, legPos.z)));
+    table->AddChild(createCuboid(glm::vec3(legW, height, legW), woodColor, glm::vec3(-legPos.x, height/2.0f, legPos.z)));
+    table->AddChild(createCuboid(glm::vec3(legW, height, legW), woodColor, glm::vec3(legPos.x, height/2.0f, -legPos.z)));
+    table->AddChild(createCuboid(glm::vec3(legW, height, legW), woodColor, glm::vec3(-legPos.x, height/2.0f, -legPos.z)));
+    
+    return table;
+}
+
+static SceneNode::Ptr createChair(float size)
+{
+    auto chair = std::make_shared<SceneNode>();
+    glm::vec3 woodColor(0.5f, 0.35f, 0.15f);
+    float seatH = 0.45f;
+    
+    // Seat
+    chair->AddChild(createCuboid(glm::vec3(size, 0.05f, size), woodColor, glm::vec3(0.0f, seatH, 0.0f)));
+    
+    // Backrest
+    chair->AddChild(createCuboid(glm::vec3(size, size, 0.05f), woodColor, glm::vec3(0.0f, seatH + size/2.0f, -size/2.0f + 0.025f)));
+    
+    // Legs
+    float legW = 0.04f;
+    float legH = seatH;
+    glm::vec3 legPos(size/2.0f - legW/2.0f, 0.0f, size/2.0f - legW/2.0f);
+    
+    chair->AddChild(createCuboid(glm::vec3(legW, legH, legW), woodColor, glm::vec3(legPos.x, legH/2.0f, legPos.z)));
+    chair->AddChild(createCuboid(glm::vec3(legW, legH, legW), woodColor, glm::vec3(-legPos.x, legH/2.0f, legPos.z)));
+    chair->AddChild(createCuboid(glm::vec3(legW, legH, legW), woodColor, glm::vec3(legPos.x, legH/2.0f, -legPos.z)));
+    chair->AddChild(createCuboid(glm::vec3(legW, legH, legW), woodColor, glm::vec3(-legPos.x, legH/2.0f, -legPos.z)));
+    
+    return chair;
+}
+
+static SceneNode::Ptr createBlackboard(float width, float height)
+{
+    auto boardGroup = std::make_shared<SceneNode>();
+    
+    // Board Node (Frame + Surface)
+    auto board = std::make_shared<SceneNode>();
+    
+    // Frame
+    glm::vec3 frameColor(0.3f, 0.2f, 0.1f);
+    float frameT = 0.05f;
+    board->AddChild(createCuboid(glm::vec3(width, height, 0.05f), frameColor, glm::vec3(0.0f, 0.0f, 0.0f)));
+    
+    // Surface (Green)
+    board->AddChild(createCuboid(glm::vec3(width - 2*frameT, height - 2*frameT, 0.06f), glm::vec3(0.1f, 0.4f, 0.2f), glm::vec3(0.0f, 0.0f, 0.01f)));
+    
+    // Raise board to standing height
+    float standHeight = 1.0f; // Height from floor to bottom of board
+    float totalH = standHeight + height/2.0f;
+    board->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, totalH, 0.0f)));
+    boardGroup->AddChild(board);
+    
+    // --- STAND / LEGS ---
+    glm::vec3 metalColor(0.2f, 0.2f, 0.2f);
+    float legW = 0.05f;
+    
+    // Left Leg
+    boardGroup->AddChild(createCuboid(
+        glm::vec3(legW, totalH + height/2.0f, 0.1f), 
+        metalColor, 
+        glm::vec3(-width/2.0f, (totalH + height/2.0f)/2.0f, 0.0f)
+    ));
+    
+    // Right Leg
+    boardGroup->AddChild(createCuboid(
+        glm::vec3(legW, totalH + height/2.0f, 0.1f), 
+        metalColor, 
+        glm::vec3(width/2.0f, (totalH + height/2.0f)/2.0f, 0.0f)
+    ));
+    
+    // Feet
+    float footLen = 0.6f;
+    boardGroup->AddChild(createCuboid(glm::vec3(legW, 0.05f, footLen), metalColor, glm::vec3(-width/2.0f, 0.025f, 0.0f)));
+    boardGroup->AddChild(createCuboid(glm::vec3(legW, 0.05f, footLen), metalColor, glm::vec3(width/2.0f, 0.025f, 0.0f)));
+    
+    // Crossbar
+    boardGroup->AddChild(createCuboid(glm::vec3(width, 0.05f, 0.05f), metalColor, glm::vec3(0.0f, standHeight/2.0f, 0.0f)));
+    
+    return boardGroup;
+}
+
+static SceneNode::Ptr createPodium()
+{
+    auto podium = std::make_shared<SceneNode>();
+    glm::vec3 woodColor(0.55f, 0.35f, 0.2f);
+    
+    // Base Box
+    podium->AddChild(createCuboid(glm::vec3(1.2f, 1.1f, 0.6f), woodColor, glm::vec3(0.0f, 0.55f, 0.0f)));
+    
+    return podium;
 }
 
 // Helper: Create a large, complex tree
@@ -213,6 +382,9 @@ static SceneNode::Ptr createTree(float height = 6.5f)
     return tree;
 }
 
+// Forward declare
+static SceneNode::Ptr createStaircase(float height, float width, float depth, int numSteps);
+
 static SceneNode::Ptr createWing(float w, float h, float d, bool withWindows, bool isCenter,
                                   float balconyExtraLength = 3.7f, 
                                   float balconyWidthRatio = 1.0f,
@@ -226,139 +398,535 @@ static SceneNode::Ptr createWing(float w, float h, float d, bool withWindows, bo
                                   float doorStartX = -1000.0f,
                                   float doorEndX = 1000.0f,
                                   int doorMode = 0,  // 0=auto, 1=single left, 2=single right, 3=symmetric pair, 4=no doors
-                                  int doorFloor = 3) // 1=floor1 only, 2=floor2 only, 3=both floors
+                                  int doorFloor = 3, // 1=floor1 only, 2=floor2 only, 3=both floors
+                                  int maskStart = 1, // Number of slots to mask (no window) from start
+                                  int maskEnd = 1)   // Number of slots to mask (no window) from end
 {
     auto wing = std::make_shared<SceneNode>();
     
-    // Main Wall Body
+    // Materials
     glm::vec3 wallColor(0.9f, 0.85f, 0.8f); // Cream/White wall
-    auto walls = createCuboid(glm::vec3(w, h, d), wallColor, glm::vec3(0.0f, h/2.0f, 0.0f));
-    wing->AddChild(walls);
-    
-    // Roof
+    glm::vec3 floorColor(0.6f, 0.6f, 0.65f); // Concrete floor
     glm::vec3 roofColor(0.7f, 0.3f, 0.3f); // Red roof
+    glm::vec3 pillarColor(0.85f, 0.8f, 0.75f); // Slightly darker for pillars
+    
+    // Dimensions
+    float wallThick = 0.2f;
+    float floorThick = 0.2f;
+    
+    // --- 1. BUILD THE SHELL (Walls, Floors, Ceiling) ---
+    
+    // Back Wall (Solid)
+    auto backWall = createCuboid(
+        glm::vec3(w, h, wallThick),
+        wallColor,
+        glm::vec3(0.0f, h/2.0f, -d/2.0f + wallThick/2.0f)
+    );
+    wing->AddChild(backWall);
+    
+    // Left Wall (Solid side)
+    auto leftWall = createCuboid(
+        glm::vec3(wallThick, h, d),
+        wallColor,
+        glm::vec3(-w/2.0f + wallThick/2.0f, h/2.0f, 0.0f)
+    );
+    wing->AddChild(leftWall);
+    
+    // Right Wall (Solid side)
+    auto rightWall = createCuboid(
+        glm::vec3(wallThick, h, d),
+        wallColor,
+        glm::vec3(w/2.0f - wallThick/2.0f, h/2.0f, 0.0f)
+    );
+    wing->AddChild(rightWall);
+    
+    // Floor 1 (Ground)
+    auto floor1 = createCuboid(
+        glm::vec3(w, floorThick, d),
+        floorColor,
+        glm::vec3(0.0f, floorThick/2.0f, 0.0f)
+    );
+    wing->AddChild(floor1);
+    
+    // Ceiling / Roof Base
+    auto ceiling = createCuboid(
+        glm::vec3(w, floorThick, d),
+        wallColor,
+        glm::vec3(0.0f, h - floorThick/2.0f, 0.0f)
+    );
+    wing->AddChild(ceiling);
+    
+    // Slanted Roof Top
     float roofH = 0.5f;
     float overhang = 0.4f;
-    auto roof = createCuboid(glm::vec3(w + overhang, roofH, d + overhang), roofColor, glm::vec3(0.0f, h + roofH/2.0f, 0.0f));
+    auto roof = createCuboid(
+        glm::vec3(w + overhang, roofH, d + overhang), 
+        roofColor, 
+        glm::vec3(0.0f, h + roofH/2.0f, 0.0f)
+    );
     wing->AddChild(roof);
-    
-    // Add Windows
-    if (withWindows)
-    {
-        float winW = 1.2f;
-        float winH = 1.5f;
-        float spacing = 2.5f;
-        int count = static_cast<int>(w / spacing) - 1;
-        
-        float startX = -((count - 1) * spacing) / 2.0f;
-        
-        for (int i = 0; i < count; ++i)
-        {
-            // Floor 1 - Windows
-            auto w1 = createWindow(winW, winH);
-            w1->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(startX + i*spacing, 1.5f, d/2.0f + 0.1f)));
-            wing->AddChild(w1);
-            
-            // Floor 2 - Windows
-            if (h > 4.0f) {
-                auto w2 = createWindow(winW, winH);
-                w2->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(startX + i*spacing, 4.5f, d/2.0f + 0.1f)));
-                wing->AddChild(w2);
-            }
-        }
-        
-        // Add Classroom Doors - theo chế độ tùy chỉnh
-        float doorW = 1.0f;
-        float doorH = 2.2f;
-        
-        // Tầng 1
-        if ((doorFloor & 1) && doorMode != 4) {  // doorFloor & 1 = có tầng 1, mode 4 = no doors
-            if (doorMode == 1) {
-                // Mode 1: Một cửa ở ngoài cùng bên trái
-                float doorX = -w/2.0f + 1.5f;  // Gần mép trái
-                auto door = createDoor(doorW, doorH);
-                door->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(doorX, 0.0f, d/2.0f + 0.15f)));
-                wing->AddChild(door);
-            } else if (doorMode == 2) {
-                // Mode 2: Một cửa ở ngoài cùng bên phải
-                float doorX = w/2.0f - 1.5f;  // Gần mép phải
-                auto door = createDoor(doorW, doorH);
-                door->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(doorX, 0.0f, d/2.0f + 0.15f)));
-                wing->AddChild(door);
-            } else if (doorMode == 3) {
-                // Mode 3: Hai cửa đối xứng ở giữa
-                float doorOffset = 1.5f;
-                auto door1 = createDoor(doorW, doorH);
-                door1->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-doorOffset, 0.0f, d/2.0f + 0.15f)));
-                wing->AddChild(door1);
-                
-                auto door2 = createDoor(doorW, doorH);
-                door2->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(doorOffset, 0.0f, d/2.0f + 0.15f)));
-                wing->AddChild(door2);
-            } else if (doorMode == 0) {
-                // Mode 0: Auto - cửa cách một khoảng (logic cũ)
-                for (int i = 0; i < count - 1; i += 2) {
-                    float doorX = startX + i*spacing + spacing/2.0f;
-                    if (doorX >= doorStartX && doorX <= doorEndX) {
-                        auto classroomDoor = createDoor(doorW, doorH);
-                        classroomDoor->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(doorX, 0.0f, d/2.0f + 0.15f)));
-                        wing->AddChild(classroomDoor);
-                    }
-                }
-            }
-        }
-        
-        // Tầng 2
-        if (h > 4.0f && (doorFloor & 2) && doorMode != 4) {  // doorFloor & 2 = có tầng 2
-            if (doorMode == 1) {
-                // Mode 1: Một cửa ở ngoài cùng bên trái
-                float doorX = -w/2.0f + 1.5f;
-                auto door = createDoor(doorW, doorH);
-                door->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(doorX, 3.5f, d/2.0f + 0.15f)));
-                wing->AddChild(door);
-            } else if (doorMode == 2) {
-                // Mode 2: Một cửa ở ngoài cùng bên phải
-                float doorX = w/2.0f - 1.5f;
-                auto door = createDoor(doorW, doorH);
-                door->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(doorX, 3.5f, d/2.0f + 0.15f)));
-                wing->AddChild(door);
-            } else if (doorMode == 3) {
-                // Mode 3: Hai cửa đối xứng ở giữa
-                float doorOffset = 1.5f;
-                auto door1 = createDoor(doorW, doorH);
-                door1->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-doorOffset, 3.5f, d/2.0f + 0.15f)));
-                wing->AddChild(door1);
-                
-                auto door2 = createDoor(doorW, doorH);
-                door2->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(doorOffset, 3.5f, d/2.0f + 0.15f)));
-                wing->AddChild(door2);
-            } else if (doorMode == 0) {
-                // Mode 0: Auto - cửa cách một khoảng (logic cũ)
-                for (int i = 0; i < count - 1; i += 2) {
-                    float doorX = startX + i*spacing + spacing/2.0f;
-                    if (doorX >= doorStartX && doorX <= doorEndX) {
-                        auto classroomDoor2 = createDoor(doorW, doorH);
-                        classroomDoor2->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(doorX, 3.5f, d/2.0f + 0.15f)));
-                        wing->AddChild(classroomDoor2);
-                    }
-                }
-            }
-        }
 
-    // Windows on the back side too? Let's just do front for now unless requested.
-        // Actually, for U shape, the 'front' of side wings faces inward.
+    // Floor 2 (Intermediate) - If 2-story
+    bool isTwoStory = (h > 4.0f);
+    float floor2Y = 3.5f; // Height of 2nd floor
+    
+    if (isTwoStory) {
+        auto floor2 = createCuboid(
+            glm::vec3(w - 2*wallThick, floorThick, d - 2*wallThick), // Slightly smaller to fit inside walls
+            floorColor,
+            glm::vec3(0.0f, floor2Y - floorThick/2.0f, 0.0f)
+        );
+        wing->AddChild(floor2);
+        
+        // Internal Staircase REMOVED as requested
     }
+    
+    // --- 2. FACADE SYSTEM (Front Wall with Windows/Doors) ---
+    // We construct the front wall segment by segment
+    
+    float spacing = 2.5f;
+    int count = static_cast<int>(w / spacing); // Number of slots
+    if (count % 2 == 0) count--; // Ensure odd number
+    
+    float slotWidth = w / count;
+    float startX = -w/2.0f + slotWidth/2.0f;
+    
+    float frontZ = d/2.0f - wallThick/2.0f;
+    
+    // Window params - RAISED HIGHER
+    float winW = 1.2f;
+    float winH = 1.4f;
+    float winY1 = 2.2f; // Raised Floor 1 Window
+    float winY2 = 5.6f; // Raised Floor 2 Window (Significantly higher)
+    
+    // Door params
+    float doorW = 1.0f;
+    float doorH = 2.4f; 
+    
+    for (int i = 0; i < count; ++i)
+    {
+        float currentX = startX + i * slotWidth;
+        
+        // --- PILLARS (Between slots) ---
+        // Right side of this slot
+        if (i < count - 1) {
+            auto pillar = createCuboid(
+                glm::vec3(0.3f, h, wallThick),
+                pillarColor,
+                glm::vec3(currentX + slotWidth/2.0f, h/2.0f, frontZ)
+            );
+            wing->AddChild(pillar);
+        }
+        
+        // SPECIAL LOGIC for Center Wing
+        // Floor 1: Center is Double Door. Adjacent are Windows. Rest are Walls.
+        // Floor 2: Center-1 (Left) is Door. Center+1 (Right) is Window.
+        
+        bool isMid = (i == count/2);
+        bool isMidLeft = (i == count/2 - 1);
+        bool isMidRight = (i == count/2 + 1);
+        
+        bool hasDoor = false;
+        
+        if (isCenter) {
+            // Floor 1 Logic
+            // Only Main Center Door (Double)
+            hasDoor = (isMid);
+        } else {
+             // Standard Logic for other wings
+             // ... existing checks ...
+             if (isCenter && i > count/2) hasDoor = false; // (This block handles Floor 2 if we are in loop? Wait, loop handles Floor 1 only here)
+             // Ah, this loop is strictly FACADE (which implies Floor 1 if not 2-story? No, this loop builds wall columns which span H)
+             // NO, looking at structure:
+             // Pillars are height H.
+             // Slot Content Floor 1 is lines 406-460.
+             // Slot Content Floor 2 is lines 502-580.
+             
+             // So here is Floor 1 Logic ONLY.
+        }
+        
+        // Re-eval hasDoor for Floor 1
+         if (isCenter) {
+             hasDoor = isMid; // Only center has door on Floor 1
+         } else {
+             // Existing logic for Left/Right wings
+             // (Retain existing logic block)
+             if (doorMode == 0) {
+                  if (i % 2 == 0) hasDoor = true; 
+             } else if ((doorFloor & 1) && doorMode != 4) {
+                  if (doorMode == 1 && i == 0) hasDoor = true; // Left
+                  else if (doorMode == 2 && i == count-1) hasDoor = true; // Right
+                  else if (doorMode == 3 && (i == count/2 - 1 || i == count/2 + 1)) hasDoor = true; // Middle pair
+             }
+         }
+        
+        if (hasDoor) {
+            bool isDoubleDoor = (isCenter && isMid);
+            float actualDoorW = isDoubleDoor ? 1.6f : doorW; 
+            
+            // Door Slot
+            // 1. Door Frame / Lintel
+            float lintelH = floor2Y - doorH;
+            if (lintelH > 0) {
+                auto lintel = createCuboid(
+                    glm::vec3(slotWidth, lintelH, wallThick),
+                    wallColor,
+                    glm::vec3(currentX, doorH + lintelH/2.0f, frontZ)
+                );
+                wing->AddChild(lintel);
+            }
+            
+            // 2. Side Walls (Jambs)
+            float sideGap = (slotWidth - actualDoorW) / 2.0f;
+            if (sideGap > 0.05f) {
+                // Left Jamb
+                wing->AddChild(createCuboid(
+                    glm::vec3(sideGap, doorH, wallThick),
+                    wallColor,
+                    glm::vec3(currentX - actualDoorW/2.0f - sideGap/2.0f, doorH/2.0f, frontZ)
+                ));
+                // Right Jamb
+                wing->AddChild(createCuboid(
+                    glm::vec3(sideGap, doorH, wallThick),
+                    wallColor,
+                    glm::vec3(currentX + actualDoorW/2.0f + sideGap/2.0f, doorH/2.0f, frontZ)
+                ));
+            }
+            
+                // 3. The Door Object(s)
+            if (isDoubleDoor) {
+                float leafW = 0.8f;
+                // Left Leaf (-90 open)
+                auto doorLeft = createDoor(leafW, doorH, -90.0f);
+                doorLeft->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(currentX - leafW, 0.0f, frontZ + 0.1f)));
+                wing->AddChild(doorLeft);
+                
+                // Right Leaf (90 open, Rotated body)
+                auto doorRight = createDoor(leafW, doorH, 90.0f);
+                glm::mat4 rt = glm::translate(glm::mat4(1.0f), glm::vec3(currentX + leafW, 0.0f, frontZ + 0.1f));
+                rt = glm::rotate(rt, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+                doorRight->SetLocalTransform(rt);
+                wing->AddChild(doorRight);
+                
+            } else {
+                auto doorObj = createDoor(doorW, doorH);
+                // Offset by -doorW/2
+                doorObj->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(currentX - doorW/2.0f, 0.0f, frontZ + 0.1f)));
+                wing->AddChild(doorObj);
+            }
+            
+            // --- FURNITURE PLACEMENT (CLASSROOM SETUP) ---
+            // Layout: Determined by room position
+            // Left Half of Wing (i < count/2): Room extends +X. Board on Left (-X). Desks face Left.
+            // Right Half of Wing (i >= count/2): Room extends -X. Board on Right (+X). Desks face Right.
+            
+            float direction = (i < count/2) ? 1.0f : -1.0f; 
+            // If Double Door at exact center, assume direction 1 (or symmetric?) -> Let's use 1.
+            if (isCenter && isMid) direction = 1.0f;
+            
+            float roomDepth = d - 2*wallThick; 
+            
+            // 1. Blackboard
+            auto board = createBlackboard(2.4f, 1.2f);
+            // Position: 0.9m from door center in 'direction' reverse (i.e. towards the wall we lean on)
+            // Actually: The "Side Wall" we face is at local 0 relative to room block?
+            // If dir=1 (Extend Right), Board is on Left Wall (near door). X offset = -0.9f.
+            // If dir=-1 (Extend Left), Board is on Right Wall (near door). X offset = +0.9f.
+            float boardX = -0.9f * direction;
+            
+            glm::mat4 bt = glm::translate(glm::mat4(1.0f), glm::vec3(currentX + boardX, 0.0f, 0.0f));
+            // Rotate: If dir=1, Face +X (90). If dir=-1, Face -X (-90).
+            bt = glm::rotate(bt, glm::radians(90.0f * direction), glm::vec3(0.0f, 1.0f, 0.0f));
+            board->SetLocalTransform(bt);
+            wing->AddChild(board);
+            
+            // 2. Student Desks (Split into 2 groups for Aisle)
+            int rows = 5; // More rows at back
+            int groupCols = 2; // 2 cols per side
+            // Total width used: 2*1.0 + Gap + 2*1.0 = ~5m
+            
+            float deskSpacingX = 1.1f;
+            float deskSpacingZ = 1.1f; 
+            float aisleWidth = 1.2f; // Gap in middle
+            
+            // Iterate rows (distance from board)
+            for (int r = 0; r < rows; ++r) {
+                // Determine X distance from door/board
+                // Start gap: 0.8m.
+                float dx = (0.8f + r * deskSpacingX) * direction;
+                
+                // Group 1 (Lower Z / Left side of aisle)
+                for (int c = 0; c < groupCols; ++c) {
+                    // Z pos relative to center: -HalfGap - Spacing
+                    float zOffset = -(aisleWidth/2.0f + 0.5f + c * deskSpacingZ);
+                     
+                    glm::vec3 deskPos(currentX + dx, 0.0f, zOffset);
+                    
+                    // Table
+                    auto table = createTable(1.1f, 0.5f, 0.7f);
+                    glm::mat4 tt = glm::translate(glm::mat4(1.0f), deskPos);
+                    tt = glm::rotate(tt, glm::radians(90.0f * direction), glm::vec3(0.0f, 1.0f, 0.0f));
+                    table->SetLocalTransform(tt);
+                    wing->AddChild(table);
+                    
+                    // Chair (Behind table)
+                    auto chair = createChair(0.35f);
+                    // Offset: +0.5 * direction (Since chair is "behind" along X)
+                    glm::mat4 ct = glm::translate(glm::mat4(1.0f), deskPos + glm::vec3(0.5f * direction, 0.0f, 0.0f));
+                    // Chair Back faces Board. Board is at -direction. Chair Front faces Board. 
+                    // createChair faces +Z? No, wait. 
+                    // Previous logic: rotate 90 -> Face -X. (When dir=1).
+                    // If dir=1, Rotate 90. Chair Back at +X. Front at -X. Correct.
+                    // If dir=-1, Rotate -90. Chair Back at -X. Front at +X. Correct.
+                    ct = glm::rotate(ct, glm::radians(-90.0f * direction), glm::vec3(0.0f, 1.0f, 0.0f));
+                    chair->SetLocalTransform(ct);
+                    wing->AddChild(chair);
+                }
+                
+                // Group 2 (Upper Z / Right side of aisle)
+                for (int c = 0; c < groupCols; ++c) {
+                    float zOffset = (aisleWidth/2.0f + 0.5f + c * deskSpacingZ);
+                    
+                    glm::vec3 deskPos(currentX + dx, 0.0f, zOffset);
+                    
+                    // Table
+                    auto table = createTable(1.1f, 0.5f, 0.7f);
+                    glm::mat4 tt = glm::translate(glm::mat4(1.0f), deskPos);
+                    tt = glm::rotate(tt, glm::radians(90.0f * direction), glm::vec3(0.0f, 1.0f, 0.0f));
+                    table->SetLocalTransform(tt);
+                    wing->AddChild(table);
+                    
+                    // Chair
+                    auto chair = createChair(0.35f);
+                    glm::mat4 ct = glm::translate(glm::mat4(1.0f), deskPos + glm::vec3(0.5f * direction, 0.0f, 0.0f));
+                    ct = glm::rotate(ct, glm::radians(-90.0f * direction), glm::vec3(0.0f, 1.0f, 0.0f));
+                    chair->SetLocalTransform(ct);
+                    wing->AddChild(chair);
+                }
+            }
+            
+        } else {
+            // Window Slot (or Wall)
+            bool isIntersection = (i < maskStart || i >= count - maskEnd);
+            bool forceWindow = (isCenter && (isMidLeft || isMidRight)); // Force 2 side windows
+            
+            if ((withWindows && !isIntersection) || forceWindow) {
+                // Wall Below Window
+                float belowH = winY1 - winH/2.0f;
+                wing->AddChild(createCuboid(
+                    glm::vec3(slotWidth, belowH, wallThick),
+                    wallColor,
+                    glm::vec3(currentX, belowH/2.0f, frontZ)
+                ));
+                
+                // The Window
+                auto winObj = createWindow(winW, winH);
+                winObj->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(currentX, winY1, frontZ)));
+                wing->AddChild(winObj);
+                
+                // Wall Above Window (up to floor 2)
+                float topY = floor2Y; 
+                float baseWinTop = winY1 + winH/2.0f;
+                float heightAbove = topY - baseWinTop;
+                
+                if (heightAbove > 0) {
+                    wing->AddChild(createCuboid(
+                        glm::vec3(slotWidth, heightAbove, wallThick),
+                        wallColor,
+                        glm::vec3(currentX, baseWinTop + heightAbove/2.0f, frontZ)
+                    ));
+                }
+            } else {
+                // Solid Wall Slot (No Window)
+                wing->AddChild(createCuboid(
+                     glm::vec3(slotWidth, floor2Y, wallThick),
+                     wallColor,
+                     glm::vec3(currentX, floor2Y/2.0f, frontZ)
+                ));
+            }
+        }
+        
+        // --- SLOT CONTENT (Floor 2) ---
+        if (isTwoStory) {
+             // Logic for Floor 2 Doors and Windows
+             bool hasDoor2 = false; // Default
+             
+             // Enable doors for floor 2 similar to floor 1 if configured
+             if (doorFloor & 2) { // 2 = has 2nd floor doors
+                 if (doorMode == 0) {
+                     // Auto mode: same pattern as floor 1
+                     if (i % 2 == 0) hasDoor2 = true;
+                 } else if (doorMode != 4) {
+                     // Mimic floor 1 custom modes
+                     if (doorMode == 1 && i == 0) hasDoor2 = true;
+                     else if (doorMode == 2 && i == count-1) hasDoor2 = true;
+                     else if (doorMode == 3 && (i == count/2 - 1 || i == count/2 + 1)) hasDoor2 = true;
+                 }
+                 
+                 // SPECIAL LOGIC: Center Wing (isCenter == true)
+                 // User request: "1 bên thay cửa ra vào bằng cửa sổ" -> Replace Right Door with Window
+                 // The right door is commonly at index > count/2
+                 if (isCenter && i > count/2) {
+                     hasDoor2 = false; // Disable right side door
+                 }
+             }
+
+             if (hasDoor2) {
+                // Door at Floor 2
+                // 1. Lintel above door
+                float lintelH = (h - floor2Y) - doorH; 
+                if (lintelH > 0) {
+                    wing->AddChild(createCuboid(
+                        glm::vec3(slotWidth, lintelH, wallThick),
+                        wallColor,
+                        glm::vec3(currentX, floor2Y + doorH + lintelH/2.0f, frontZ)
+                    ));
+                }
+                
+                // 2. Side Walls (Jambs) to fill the gap (Door=1.0, Slot=2.5)
+                float sideGap = (slotWidth - doorW) / 2.0f;
+                if (sideGap > 0.05f) {
+                    // Left Jamb
+                    wing->AddChild(createCuboid(
+                        glm::vec3(sideGap, doorH, wallThick),
+                        wallColor,
+                        glm::vec3(currentX - doorW/2.0f - sideGap/2.0f, floor2Y + doorH/2.0f, frontZ)
+                    ));
+                    // Right Jamb
+                    wing->AddChild(createCuboid(
+                        glm::vec3(sideGap, doorH, wallThick),
+                        wallColor,
+                        glm::vec3(currentX + doorW/2.0f + sideGap/2.0f, floor2Y + doorH/2.0f, frontZ)
+                    ));
+                }
+                
+                // 3. The Door Object
+                auto doorObj2 = createDoor(doorW, doorH);
+                // Offset by -doorW/2 to center
+                doorObj2->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(currentX - doorW/2.0f, floor2Y, frontZ + 0.1f)));
+                wing->AddChild(doorObj2);
+                
+                // --- FURNITURE PLACEMENT (FLOOR 2) ---
+                
+                float direction = (i < count/2) ? 1.0f : -1.0f; 
+                if (isCenter && isMid) direction = 1.0f;
+                // Center wing floor 2 has door at mid-1 (Left). 
+                // If i=mid-1 (Left), dir=1. Extends Right. Correct.
+                // If i=mid+1 (Right), Window. No door. (We still build furniture? Code implies furniture built per-slot if door exists?)
+                // Wait, Floor 2 furniture block is inside `if (hasDoor2)`.
+                // So furniture implies door.
+                // If Center Wing Force Window logic creates furniture? No, that's in `else`.
+                // So Floor 2 rooms only appear where doors are.
+                
+                // 1. Blackboard
+                auto board = createBlackboard(2.4f, 1.2f);
+                float boardX = -0.9f * direction;
+                
+                glm::mat4 bt = glm::translate(glm::mat4(1.0f), glm::vec3(currentX + boardX, floor2Y, 0.0f));
+                bt = glm::rotate(bt, glm::radians(90.0f * direction), glm::vec3(0.0f, 1.0f, 0.0f));
+                board->SetLocalTransform(bt);
+                wing->AddChild(board);
+                
+                // 2. Student Desks
+                int rows = 5;
+                int groupCols = 2;
+                float deskSpacingX = 1.1f;
+                float deskSpacingZ = 1.1f;
+                float aisleWidth = 1.2f;
+                
+                for (int r = 0; r < rows; ++r) {
+                    float dx = (0.8f + r * deskSpacingX) * direction;
+                    
+                    // Group 1
+                    for (int c = 0; c < groupCols; ++c) {
+                        float zOffset = -(aisleWidth/2.0f + 0.5f + c * deskSpacingZ);
+                        glm::vec3 deskPos(currentX + dx, floor2Y, zOffset);
+                        
+                        auto table = createTable(1.1f, 0.5f, 0.7f);
+                        glm::mat4 tt = glm::translate(glm::mat4(1.0f), deskPos);
+                        tt = glm::rotate(tt, glm::radians(90.0f * direction), glm::vec3(0.0f, 1.0f, 0.0f));
+                        table->SetLocalTransform(tt);
+                        wing->AddChild(table);
+                        
+                        auto chair = createChair(0.35f);
+                        glm::mat4 ct = glm::translate(glm::mat4(1.0f), deskPos + glm::vec3(0.5f * direction, 0.0f, 0.0f));
+                        ct = glm::rotate(ct, glm::radians(-90.0f * direction), glm::vec3(0.0f, 1.0f, 0.0f));
+                        chair->SetLocalTransform(ct);
+                        wing->AddChild(chair);
+                    }
+                    
+                    // Group 2
+                    for (int c = 0; c < groupCols; ++c) {
+                        float zOffset = (aisleWidth/2.0f + 0.5f + c * deskSpacingZ);
+                        glm::vec3 deskPos(currentX + dx, floor2Y, zOffset);
+                        
+                        auto table = createTable(1.1f, 0.5f, 0.7f);
+                        glm::mat4 tt = glm::translate(glm::mat4(1.0f), deskPos);
+                        tt = glm::rotate(tt, glm::radians(90.0f * direction), glm::vec3(0.0f, 1.0f, 0.0f));
+                        table->SetLocalTransform(tt);
+                        wing->AddChild(table);
+                        
+                        auto chair = createChair(0.35f);
+                        glm::mat4 ct = glm::translate(glm::mat4(1.0f), deskPos + glm::vec3(0.5f * direction, 0.0f, 0.0f));
+                        ct = glm::rotate(ct, glm::radians(-90.0f * direction), glm::vec3(0.0f, 1.0f, 0.0f));
+                        chair->SetLocalTransform(ct);
+                        wing->AddChild(chair);
+                    }
+                }
+                
+             } else {
+                 bool isIntersection = (i < maskStart || i >= count - maskEnd);
+                 bool forceWindow = (isCenter && isMidRight); // Force window on right side (symmetric to Door)
+                 
+                 if ((withWindows && !isIntersection) || forceWindow) {
+                    // Wall Below Window (from floor2Y to Window Bottom)
+                    float baseH = floor2Y;
+                    float winBottom = winY2 - winH/2.0f;
+                    float belowH = winBottom - baseH;
+                    
+                    if (belowH > 0) {
+                        wing->AddChild(createCuboid(
+                            glm::vec3(slotWidth, belowH, wallThick),
+                            wallColor,
+                            glm::vec3(currentX, baseH + belowH/2.0f, frontZ)
+                        ));
+                    }
+                    
+                    // Window
+                    auto winObj2 = createWindow(winW, winH);
+                    winObj2->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(currentX, winY2, frontZ)));
+                    wing->AddChild(winObj2);
+                    
+                    // Wall Above Window (up to roof)
+                    float winTop = winY2 + winH/2.0f;
+                    float heightAbove = h - winTop;
+                    
+                    if (heightAbove > 0) {
+                        wing->AddChild(createCuboid(
+                            glm::vec3(slotWidth, heightAbove, wallThick),
+                            wallColor,
+                            glm::vec3(currentX, winTop + heightAbove/2.0f, frontZ)
+                        ));
+                    }
+                 } else {
+                     // Solid Wall
+                     float height = h - floor2Y;
+                     wing->AddChild(createCuboid(
+                         glm::vec3(slotWidth, height, wallThick),
+                         wallColor,
+                         glm::vec3(currentX, floor2Y + height/2.0f, frontZ)
+                    ));
+                 }
+             }
+        }
+    }
+
     
     // -- 2nd Floor Corridor / Balcony --
     // Extending from the front face (Z+) at 2nd floor level (y=3.5)
-    // The reference shows a continuous U-shaped balcony.
-    // For Side Wings: "Front" face is inwards (facing courtyard).
-    // For Center Wing: "Front" face is outwards (facing courtyard).
-    // Width should cover the entire wing length.
     
-    float corridorDepth = 1.6f; // Slightly deeper for walking
+    float corridorDepth = 1.6f; 
     float corridorThickness = 0.2f;
-    float floor2Y = 3.5f;
     
     // Cấu hình ban công từ tham số hàm
     float corridorExtraLength = balconyExtraLength;
@@ -368,7 +936,7 @@ static SceneNode::Ptr createWing(float w, float h, float d, bool withWindows, bo
     
     auto corridor = createCuboid(
         glm::vec3(corridorWidth, corridorThickness, corridorDepth),
-        wallColor, // Match wall or concrete
+        floorColor, // Match floor
         glm::vec3(corridorOffsetX, floor2Y - corridorThickness/2.0f, d/2.0f + corridorDepth/2.0f)
     );
     wing->AddChild(corridor);
@@ -401,18 +969,16 @@ static SceneNode::Ptr createWing(float w, float h, float d, bool withWindows, bo
     }
     
     // Vertical bars spacing
-    float barSpacing = 0.4f; // Closer spacing for vertical bar look    
+    float barSpacing = 0.4f; 
     float totalWidth = corridorWidth;
     int numBars = static_cast<int>(totalWidth / barSpacing);
     
     // Phạm vi thanh chắn
     float minBarX, maxBarX;
     if (useCustomBarRange) {
-        // Sử dụng phạm vi tùy chỉnh (cho ban công giữa)
         minBarX = customBarMinX;
         maxBarX = customBarMaxX;
     } else {
-        // Phạm vi mặc định: toàn bộ ban công
         minBarX = corridorOffsetX - corridorWidth/2.0f;
         maxBarX = corridorOffsetX + corridorWidth/2.0f;
     }
@@ -430,10 +996,6 @@ static SceneNode::Ptr createWing(float w, float h, float d, bool withWindows, bo
             wing->AddChild(bar);
         }
     }
-    
-    // Side railings (Left and Right ends of corridor)?
-    // Reference image shows continuous flow, but ends might need railings if not connected.
-    // For now, let's add them, they might clip into adjacent buildings which is fine.
     
     // Left side railing
     if (includeLeftRailing) {
@@ -762,6 +1324,52 @@ static SceneNode::Ptr createStreetlight(float height)
     light->AddChild(bulb);
     
     return light;
+}
+
+static SceneNode::Ptr createIronGate(float width, float height) {
+    auto gate = std::make_shared<SceneNode>();
+    
+    // Frame
+    float frameThick = 0.15f;
+    glm::vec3 darkMetal(0.1f, 0.1f, 0.12f);
+    
+    // Outer Frame
+    // Left
+    gate->AddChild(createCuboid(glm::vec3(frameThick, height, frameThick), darkMetal, glm::vec3(-width/2 + frameThick/2, height/2, 0)));
+    // Right
+    gate->AddChild(createCuboid(glm::vec3(frameThick, height, frameThick), darkMetal, glm::vec3(width/2 - frameThick/2, height/2, 0)));
+    // Top
+    gate->AddChild(createCuboid(glm::vec3(width, frameThick, frameThick), darkMetal, glm::vec3(0, height - frameThick/2, 0)));
+    // Bottom
+    gate->AddChild(createCuboid(glm::vec3(width, frameThick, frameThick), darkMetal, glm::vec3(0, frameThick/2, 0)));
+
+    // Vertical Bars
+    int numBars = (int)(width / 0.3f);
+    for(int i=1; i<numBars; ++i) {
+        float x = -width/2 + i * (width/numBars);
+        gate->AddChild(createCuboid(glm::vec3(0.05f, height - 2*frameThick, 0.05f), darkMetal, glm::vec3(x, height/2, 0)));
+    }
+    return gate;
+}
+
+static SceneNode::Ptr createLeverObj() {
+    auto leverNode = std::make_shared<SceneNode>();
+    
+    // Base
+    leverNode->AddChild(createCuboid(glm::vec3(0.4f, 0.1f, 0.4f), glm::vec3(0.3f), glm::vec3(0, 0.05f, 0)));
+    
+    // Handle (Pivot point)
+    auto handle = std::make_shared<SceneNode>();
+    // Stick
+    handle->AddChild(createCuboid(glm::vec3(0.05f, 0.6f, 0.05f), glm::vec3(0.8f, 0.0f, 0.0f), glm::vec3(0, 0.3f, 0)));
+    // Knob
+    handle->AddChild(createCuboid(glm::vec3(0.15f, 0.15f, 0.15f), glm::vec3(1,0,0), glm::vec3(0, 0.6f, 0)));
+    
+    handle->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0.1f, 0)));
+    
+    leverNode->AddChild(handle);
+    // Children: 0=Base, 1=Handle
+    return leverNode;
 }
 
 // Helper to create a flagpole with waving Vietnamese flag
@@ -1645,112 +2253,7 @@ static SceneNode::Ptr createFountain()
     );
     fountainNode->AddChild(tier3Water);
     
-    // === CENTRAL WATER JET (Animated fountain spray) - LOWER ===
-    glm::vec3 waterJetColor(0.5f, 0.8f, 1.0f);  // Light blue water
-    float jetBaseY = tier3Y + 0.75f;  // Start from top tier
-    int numJetSegments = 5;  // Fewer segments = shorter jet
-    
-    // Clear old jets
-    SchoolBuilder::s_waterJets.clear();
-    
-    for (int i = 0; i < numJetSegments; ++i) {
-        float segmentHeight = 0.25f;  // Shorter segments
-        float segmentWidth = 0.08f - (i * 0.01f);  // Taper as it goes up
-        float yPos = jetBaseY + i * segmentHeight;
-        
-        auto jetSegment = createCuboid(
-            glm::vec3(segmentWidth, segmentHeight, segmentWidth),
-            waterJetColor,
-            glm::vec3(0.0f, yPos, 0.0f)
-        );
-        fountainNode->AddChild(jetSegment);
-        
-        // Store for animation
-        SchoolBuilder::WaterJet jetData;
-        jetData.node = jetSegment;
-        jetData.baseY = yPos;
-        jetData.amplitude = 0.12f + i * 0.02f;  // Higher segments move more
-        jetData.frequency = 3.0f - i * 0.1f;
-        jetData.phaseOffset = i * 0.3f;  // Stagger the animation
-        jetData.initialTransform = jetSegment->GetLocalTransform();
-        SchoolBuilder::s_waterJets.push_back(jetData);
-    }
-    
-    // Water spray at top (dispersing effect)
-    for (int i = 0; i < 6; ++i) {
-        float angle = i * 60.0f;
-        float radius = 0.12f;
-        float x = std::cos(glm::radians(angle)) * radius;
-        float z = std::sin(glm::radians(angle)) * radius;
-        float topY = jetBaseY + numJetSegments * 0.25f;
-        
-        auto spray = createCuboid(
-            glm::vec3(0.05f, 0.12f, 0.05f),
-            waterJetColor,
-            glm::vec3(x, topY, z)
-        );
-        fountainNode->AddChild(spray);
-        
-        // Store spray for animation
-        SchoolBuilder::WaterJet sprayData;
-        sprayData.node = spray;
-        sprayData.baseY = topY;
-        sprayData.amplitude = 0.15f;
-        sprayData.frequency = 4.0f;
-        sprayData.phaseOffset = i * 0.5f;
-        sprayData.initialTransform = spray->GetLocalTransform();
-        SchoolBuilder::s_waterJets.push_back(sprayData);
-    }
-    
-    // === TIER 1 WATER JETS (Small jets around edge) ===
-    for (int i = 0; i < 8; ++i) {
-        float angle = i * 45.0f;
-        float x = std::cos(glm::radians(angle)) * tier1Radius;
-        float z = std::sin(glm::radians(angle)) * tier1Radius;
-        
-        // Small water jet
-        auto smallJet = createCuboid(
-            glm::vec3(0.05f, 0.4f, 0.05f),
-            waterJetColor,
-            glm::vec3(x, tier1Y + 0.25f + 0.2f, z)
-        );
-        fountainNode->AddChild(smallJet);
-        
-        // Store for animation
-        SchoolBuilder::WaterJet smallJetData;
-        smallJetData.node = smallJet;
-        smallJetData.baseY = tier1Y + 0.25f + 0.2f;
-        smallJetData.amplitude = 0.08f;
-        smallJetData.frequency = 3.5f;
-        smallJetData.phaseOffset = i * 0.4f;
-        smallJetData.initialTransform = smallJet->GetLocalTransform();
-        SchoolBuilder::s_waterJets.push_back(smallJetData);
-    }
-    
-    // === TIER 2 WATER JETS (Smaller jets) ===
-    for (int i = 0; i < 6; ++i) {
-        float angle = i * 60.0f;
-        float x = std::cos(glm::radians(angle)) * tier2Radius;
-        float z = std::sin(glm::radians(angle)) * tier2Radius;
-        
-        // Tiny water jet
-        auto tinyJet = createCuboid(
-            glm::vec3(0.04f, 0.3f, 0.04f),
-            waterJetColor,
-            glm::vec3(x, tier2Y + 0.2f + 0.15f, z)
-        );
-        fountainNode->AddChild(tinyJet);
-        
-        // Store for animation
-        SchoolBuilder::WaterJet tinyJetData;
-        tinyJetData.node = tinyJet;
-        tinyJetData.baseY = tier2Y + 0.2f + 0.15f;
-        tinyJetData.amplitude = 0.06f;
-        tinyJetData.frequency = 4.0f;
-        tinyJetData.phaseOffset = i * 0.5f;
-        tinyJetData.initialTransform = tinyJet->GetLocalTransform();
-        SchoolBuilder::s_waterJets.push_back(tinyJetData);
-    }
+
     
     // === TOP ORNAMENT ===
     float topY = tier3Y + 0.4f;
@@ -3007,7 +3510,7 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
         float groundSize = 100.0f;
         
         // 1. Nền gạch đá chính (màu xám nhạt)
-        glm::vec3 pavingColor(0.7f, 0.7f, 0.75f);
+        glm::vec3 pavingColor(0.35f, 0.35f, 0.4f); // Darker concrete to avoid white-out
         auto pavedGround = std::make_shared<MeshNode>(MeshType::Cube);
         pavedGround->material.albedo = pavingColor;
         glm::mat4 groundT = glm::mat4(1.0f);
@@ -3134,7 +3637,7 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
         float centerBarMinX = -5.0f;
         float centerBarMaxX = 5.0f;
         
-        auto centerWing = createWing(wingW, wingH, wingD, true, true,
+        auto centerWing = createWing(wingW, wingH, wingD, false, true,
                                      0.0f,   // balconyExtraLength: không mở rộng
                                      1.0f,   // balconyWidthRatio: toàn bộ chiều dài
                                      0.0f,   // balconyOffsetX: ở giữa
@@ -3147,25 +3650,10 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
                                      -1000.0f,  // doorStartX (không dùng)
                                      1000.0f,   // doorEndX (không dùng)
                                      3,      // doorMode: 3 = hai cửa đối xứng
-                                     2);     // doorFloor: 2 = chỉ tầng 2
+                                     3,      // doorFloor: 3 = CẢ HAI TẦNG (sửa từ 2)
+                                     1, 1);  // mask: 1 slot each end
         centerWing->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -10.0f)));
         schoolParams->AddChild(centerWing);
-        
-        // Main Entrance (in front of center wing)
-        // Cao bằng lan can tầng 2
-        auto entrance = std::make_shared<SceneNode>();
-        float entSize = 4.0f;
-        float entranceHeight = 3.45f;  // Cao bằng lan can tầng 2 (floor2Y + railHeight)
-        auto entBlock = createCuboid(glm::vec3(entSize, entranceHeight, 2.0f), glm::vec3(0.8f, 0.8f, 0.9f), glm::vec3(0.0f, entranceHeight/2.0f, 0.0f));
-        entrance->AddChild(entBlock);
-        
-        // Door - phù hợp với entrance
-        auto mainDoor = createDoor(2.2f, 2.8f);
-        mainDoor->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.1f, 1.1f))); // stick out slightly
-        entrance->AddChild(mainDoor);
-        
-        entrance->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -10.0f + wingD/2.0f + 1.0f)));
-        schoolParams->AddChild(entrance);
     }
     
     // -- Left Wing --
@@ -3185,7 +3673,8 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
                                     false,  // useCustomTopRail
                                     -1000.0f, 1000.0f,  // door range (không dùng)
                                     1,      // doorMode: 1 = một cửa bên trái
-                                    3);     // doorFloor: 3 = cả 2 tầng
+                                    3,      // doorFloor: 3 = cả 2 tầng
+                                    1, 3);  // Mask 1 start, 3 end (overlap with center)
         glm::mat4 t = glm::mat4(1.0f);
         t = glm::translate(t, glm::vec3(-wingW/2.0f - wingD/2.0f + 1.0f, 0.0f, -10.0f + wingW/2.0f - wingD/2.0f)); 
         t = glm::rotate(t, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -3210,7 +3699,8 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
                                      false,  // useCustomTopRail
                                      -1000.0f, 1000.0f,  // door range (không dùng)
                                      2,      // doorMode: 2 = một cửa bên phải
-                                     3);     // doorFloor: 3 = cả 2 tầng
+                                     3,      // doorFloor: 3 = cả 2 tầng
+                                     3, 1);  // Mask 3 start (overlap with center), 1 end
         glm::mat4 t = glm::mat4(1.0f);
         t = glm::translate(t, glm::vec3(wingW/2.0f + wingD/2.0f - 1.0f, 0.0f, -10.0f + wingW/2.0f - wingD/2.0f)); 
         t = glm::rotate(t, glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -3254,13 +3744,13 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
     // -- Streetlights Along Pathway (Symmetric) --
     {
         // Place streetlights symmetrically on both sides of the path
-        int numPairs = 3; // 3 pairs = 6 lights total
+        int numPairs = 5; // 5 pairs = 10 lights total (extended to gate)
         float lightHeight = 4.0f;
         float spacing = 7.0f; // Distance between pairs
         
         for (int i = 0; i < numPairs; ++i)
         {
-            float z = 14.0f - i * spacing; // Z positions: 14, 7, 0
+            float z = 28.0f - i * spacing; // Z positions: 28, 21, 14, 7, 0 (extends to gate at Z=30)
             
             // Left side
             auto streetlightL = createStreetlight(lightHeight);
@@ -3531,6 +4021,51 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
         schoolParams->AddChild(controlPanel);
     }
     
+    // -- FUNCTIONAL SCHOOL GATE --
+    {
+        // Place Gates at Z = 30.0 (Inside Parabolic Arch)
+        float gateWidth = 5.0f; // Resize smaller to fit in 12m arch
+        float gateHeight = 3.0f;
+        
+        // Hinge Nodes (to pivot around edges)
+        
+        // Left Gate Hinge
+        auto leftHinge = std::make_shared<SceneNode>();
+        // Position: X = -5.0, Z = 30.0 (Fit inside arch width 12)
+        leftHinge->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-5.0f, 0.0f, 30.0f)));
+        
+        auto leftGate = createIronGate(gateWidth, gateHeight);
+        // Offset gate so pivot is at edge (gate goes from 0 to 5)
+        leftGate->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(gateWidth/2.0f, 0, 0)));
+        
+        leftHinge->AddChild(leftGate); 
+        schoolParams->AddChild(leftHinge);
+        
+        s_schoolGateLeft = leftHinge;
+        
+        // Right Gate Hinge
+        auto rightHinge = std::make_shared<SceneNode>();
+        // Position: X = 5.0, Z = 30.0
+        rightHinge->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(5.0f, 0.0f, 30.0f)));
+        
+        auto rightGate = createIronGate(gateWidth, gateHeight);
+        // Offset gate so pivot is at edge (gate goes from -5 to 0)
+        rightGate->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-gateWidth/2.0f, 0, 0)));
+        
+        rightHinge->AddChild(rightGate);
+        schoolParams->AddChild(rightHinge);
+        
+        s_schoolGateRight = rightHinge;
+        
+        // -- LEVER --
+        // Position OUTSIDE (Z > 30)
+        auto lever = createLeverObj();
+        lever->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-8.0f, 0.0f, 32.0f)));
+        schoolParams->AddChild(lever);
+        
+        s_gateLever = lever;
+    }
+    
     // -- Clouds in the Sky --
     {
         // Cloud 1 (very high, very large) - Directly overhead
@@ -3648,6 +4183,17 @@ std::vector<SceneNode::Ptr> SchoolBuilder::s_birds;
 std::vector<SchoolBuilder::FlagPart> SchoolBuilder::s_flagParts;
 
 
+
+// Interactive Door System
+std::vector<SchoolBuilder::Door> SchoolBuilder::s_doors;
+
+// Gate & Lever Static Definitions
+SceneNode::Ptr SchoolBuilder::s_schoolGateLeft = nullptr;
+SceneNode::Ptr SchoolBuilder::s_schoolGateRight = nullptr;
+SceneNode::Ptr SchoolBuilder::s_gateLever = nullptr;
+bool SchoolBuilder::s_isGateOpen = false;
+
+
 // Update bird animation
 void SchoolBuilder::updateBirdAnimation(SceneNode::Ptr root, float time)
 {
@@ -3725,24 +4271,82 @@ void SchoolBuilder::updateFlagAnimation(SceneNode::Ptr root, float time)
     }
 }
 
-// Static water jets for fountain animation
-std::vector<SchoolBuilder::WaterJet> SchoolBuilder::s_waterJets;
 
-// Update fountain water animation
-void SchoolBuilder::updateFountainAnimation(SceneNode::Ptr root, float time)
-{
-    for (auto& jet : SchoolBuilder::s_waterJets)
-    {
-        // Calculate oscillating Y offset (water pulsing up and down)
-        float yOffset = jet.amplitude * std::sin(time * jet.frequency + jet.phaseOffset);
+
+// Update Gate Animation
+void SchoolBuilder::updateGateAnimation(float deltaTime) {
+    float openAngle = glm::radians(90.0f);
+    float speed = 2.0f * deltaTime;
+    
+    // Interpolate hinge rotations
+    if (s_schoolGateLeft && s_schoolGateRight) {
+        // We need persistence, but static variables in function are risky if re-created.
+        // However, SceneNodes persist. We can read their current Rotation?
+        // Let's rely on a helper static float that tracks state.
+        static float currentGateAngle = 0.0f;
         
-        // Create translation matrix for the offset
-        glm::mat4 offsetMat = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, yOffset, 0.0f));
+        float target = s_isGateOpen ? openAngle : 0.0f;
         
-        // Apply offset to initial transform
-        jet.node->SetLocalTransform(offsetMat * jet.initialTransform);
+        if (std::abs(currentGateAngle - target) > 0.001f) {
+            float dir = (target > currentGateAngle) ? 1.0f : -1.0f;
+            currentGateAngle += dir * speed;
+            
+            // Clamp
+            if ((dir > 0 && currentGateAngle > target) || (dir < 0 && currentGateAngle < target))
+                currentGateAngle = target;
+                
+            // Apply rotations
+            // Left Hinge: rotates CW negative? No, opens inward (Z-) or outward (Z+)?
+            // Player starts at Z=30 (Outside). Gate at Z=20.
+            // "Inward" is Z-. "Outward" is Z+.
+            // Let's open Inward (towards school).
+            // Left hinge (at X=-7): needs to rotate CW (negative Y rot) to swing in?
+            // Right hinge (at X=7): needs to rotate CCW (positive Y rot) to swing in?
+            
+            // Wait, standard coordinates:
+            // X+ Right, Z+ Towards Viewer (Outside). Z- Inside.
+            // Left Gate (X=-7): If we rotate +90 (CCW), it swings into Z+. (Out).
+            // If we rotate -90 (CW), it swings into Z-. (In).
+            
+            // So Left -> -Angle. Right -> +Angle.
+            
+            // But we need to preserve position. SetLocalTransform overwrites.
+            // Reconstruct Transform: Translate + Rotate
+            
+            // Left Hinge at X=-5.0, Z=30.0
+            glm::mat4 leftT = glm::translate(glm::mat4(1.0f), glm::vec3(-5.0f, 0.0f, 30.0f));
+            leftT = glm::rotate(leftT, -currentGateAngle, glm::vec3(0,1,0));
+            s_schoolGateLeft->SetLocalTransform(leftT);
+            
+            // Right Hinge at X=5.0, Z=30.0
+            glm::mat4 rightT = glm::translate(glm::mat4(1.0f), glm::vec3(5.0f, 0.0f, 30.0f));
+            rightT = glm::rotate(rightT, currentGateAngle, glm::vec3(0,1,0));
+            s_schoolGateRight->SetLocalTransform(rightT);
+        }
+    }
+    
+    // Animate Lever
+    if (s_gateLever && s_gateLever->children.size() > 1) {
+        auto handle = s_gateLever->children[1];
+        float leverTarget = s_isGateOpen ? glm::radians(45.0f) : glm::radians(-45.0f);
+        static float currentLever = glm::radians(-45.0f);
+        
+        float lSpeed = 5.0f * deltaTime;
+        if (std::abs(currentLever - leverTarget) > 0.01f) {
+            float dir = (leverTarget > currentLever) ? 1.0f : -1.0f;
+            currentLever += dir * lSpeed;
+             if ((dir > 0 && currentLever > leverTarget) || (dir < 0 && currentLever < leverTarget))
+                currentLever = leverTarget;
+            
+            // Pivot is at (0, 0.1, 0)
+            glm::mat4 hT = glm::translate(glm::mat4(1.0f), glm::vec3(0, 0.1f, 0));
+            hT = glm::rotate(hT, currentLever, glm::vec3(1,0,0)); // Rotate X
+            handle->SetLocalTransform(hT);
+        }
     }
 }
+
+
     
 // Update people animation
 void SchoolBuilder::updatePeopleAnimation(SceneNode::Ptr root, float time)
@@ -3750,12 +4354,13 @@ void SchoolBuilder::updatePeopleAnimation(SceneNode::Ptr root, float time)
     if (s_people.empty()) return;
     
     // Helper to animate limbs (arms and legs swing)
-    auto animateLimbs = [](SceneNode::Ptr person, float walkCycle) {
+    // direction: 1.0 = forward, -1.0 = backward
+    auto animateLimbs = [](SceneNode::Ptr person, float walkCycle, float direction = 1.0f) {
         if (person->children.size() < 7) return; // Need all limbs
         
         // Walking cycle animation
         float armSwing = std::sin(walkCycle * 2.0f) * 30.0f; // Arms swing opposite to legs
-        float legSwing = std::sin(walkCycle * 2.0f) * 25.0f; // Legs swing
+        float legSwing = std::sin(walkCycle * 2.0f) * 25.0f * direction; // Legs swing (reversed when backward)
         
         // Get limb nodes: 3=leftArm, 4=rightArm, 5=leftLeg, 6=rightLeg
         auto leftArm = person->children[3];
@@ -3805,11 +4410,13 @@ void SchoolBuilder::updatePeopleAnimation(SceneNode::Ptr root, float time)
     {
         float walkSpeed = 0.5f;
         float x = -5.0f + std::sin(time * walkSpeed) * 3.0f;
-        float angle = (std::sin(time * walkSpeed) > 0) ? 45.0f : -135.0f;
+        bool movingForward = (std::sin(time * walkSpeed) > 0);
+        float angle = movingForward ? 45.0f : -135.0f;
+        float direction = movingForward ? 1.0f : -1.0f;
         glm::mat4 t = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, 10.0f));
         t = glm::rotate(t, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
         s_people[0]->SetLocalTransform(t);
-        animateLimbs(s_people[0], time * walkSpeed);
+        animateLimbs(s_people[0], time * walkSpeed, direction);
     }
     
     // Person 2: Walk back and forth on right pathway (Z direction)
@@ -3817,11 +4424,13 @@ void SchoolBuilder::updatePeopleAnimation(SceneNode::Ptr root, float time)
     {
         float walkSpeed = 0.6f;
         float z = 12.0f + std::sin(time * walkSpeed) * 4.0f;
-        float angle = (std::sin(time * walkSpeed) > 0) ? 0.0f : 180.0f;
+        bool movingForward = (std::sin(time * walkSpeed) > 0);
+        float angle = movingForward ? 0.0f : 180.0f;
+        float direction = movingForward ? 1.0f : -1.0f;
         glm::mat4 t = glm::translate(glm::mat4(1.0f), glm::vec3(6.0f, 0.0f, z));
         t = glm::rotate(t, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
         s_people[1]->SetLocalTransform(t);
-        animateLimbs(s_people[1], time * walkSpeed);
+        animateLimbs(s_people[1], time * walkSpeed, direction);
     }
     
     // Person 3: Walk around basketball court (circular path)
@@ -3835,7 +4444,7 @@ void SchoolBuilder::updatePeopleAnimation(SceneNode::Ptr root, float time)
         glm::mat4 t = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, z));
         t = glm::rotate(t, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
         s_people[2]->SetLocalTransform(t);
-        animateLimbs(s_people[2], time * walkSpeed);
+        animateLimbs(s_people[2], time * walkSpeed, 1.0f); // Always forward for circular
     }
     
     // Person 4: Walk back and forth near football field
@@ -3843,11 +4452,13 @@ void SchoolBuilder::updatePeopleAnimation(SceneNode::Ptr root, float time)
     {
         float walkSpeed = 0.55f;
         float z = -8.0f + std::sin(time * walkSpeed) * 5.0f;
-        float angle = (std::sin(time * walkSpeed) > 0) ? 0.0f : 180.0f;
+        bool movingForward = (std::sin(time * walkSpeed) > 0);
+        float angle = movingForward ? 0.0f : 180.0f;
+        float direction = movingForward ? 1.0f : -1.0f;
         glm::mat4 t = glm::translate(glm::mat4(1.0f), glm::vec3(22.0f, 0.0f, z));
         t = glm::rotate(t, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
         s_people[3]->SetLocalTransform(t);
-        animateLimbs(s_people[3], time * walkSpeed);
+        animateLimbs(s_people[3], time * walkSpeed, direction);
     }
     
     // Person 5: Stay at picnic table (no movement, no animation)
@@ -3857,11 +4468,13 @@ void SchoolBuilder::updatePeopleAnimation(SceneNode::Ptr root, float time)
     {
         float walkSpeed = 0.45f;
         float x = 2.0f + std::sin(time * walkSpeed) * 4.0f;
-        float angle = (std::sin(time * walkSpeed) > 0) ? 90.0f : -90.0f;
+        bool movingForward = (std::sin(time * walkSpeed) > 0);
+        float angle = movingForward ? 90.0f : -90.0f;
+        float direction = movingForward ? 1.0f : -1.0f;
         glm::mat4 t = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, 20.0f));
         t = glm::rotate(t, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
         s_people[5]->SetLocalTransform(t);
-        animateLimbs(s_people[5], time * walkSpeed);
+        animateLimbs(s_people[5], time * walkSpeed, direction);
     }
 }
 

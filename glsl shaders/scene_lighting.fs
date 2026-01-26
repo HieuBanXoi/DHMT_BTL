@@ -65,8 +65,8 @@ DirectionalLight CreateDirectionalLightFromSun(mat4 sunModelMatrix, vec3 center)
     // Sun world position is the transformed origin of the sun object
     vec3 sunWorldPos = (sunModelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 
-    // Direction of incoming light: from sun toward the scene center
-    light.direction = normalize(center - sunWorldPos);
+    // Direction of incoming light: from scene toward sun
+    light.direction = normalize(sunWorldPos - center);
 
     light.color = sunColor;
     light.intensity = sunIntensity;

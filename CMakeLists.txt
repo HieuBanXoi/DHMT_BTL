@@ -28,6 +28,11 @@ add_executable(${PROJECT_NAME}
     src/Shader.cpp
     src/GLUtils.cpp
     src/SchoolBuilder.cpp
+    src/Player.cpp
+    src/Player.h
+    src/Collision.h
+    src/ParticleSystem.cpp
+    src/ParticleSystem.h
 )
 
 # --- LIÊN KẾT THƯ VIỆN ---

@@ -83,25 +83,37 @@ public:
         glm::mat4 initialTransform;
     };
     
-    // Helper struct for fountain water animation
-    struct WaterJet {
-        SceneNode::Ptr node;
-        float baseY;           // Base Y position
-        float amplitude;       // Oscillation amplitude
-        float frequency;       // Oscillation frequency
-        float phaseOffset;     // Phase offset for variation
-        glm::mat4 initialTransform;
-    };
+
     
     // Store flag parts for animation
     static std::vector<FlagPart> s_flagParts;
     
-    // Store fountain water jets for animation
-    static std::vector<WaterJet> s_waterJets;
+
     
     // Update flag animation
     static void updateFlagAnimation(SceneNode::Ptr root, float time);
     
-    // Update fountain water animation
-    static void updateFountainAnimation(SceneNode::Ptr root, float time);
+
+
+    // Gate & Lever System
+    static SceneNode::Ptr s_schoolGateLeft;
+    static SceneNode::Ptr s_schoolGateRight;
+    static SceneNode::Ptr s_gateLever;
+    static bool s_isGateOpen;
+    static void updateGateAnimation(float deltaTime);
+
+    // Interactive Door System
+    struct Door {
+        SceneNode::Ptr node;
+        glm::vec3 position;     // World position (approx)
+        float currentAngle;     // Current rotation angle (degrees)
+        float targetAngle;      // Target angle (0 = closed, 90 = open)
+        float openAngle;        // The angle to open to (e.g. 90 or -90)
+        bool isOpen;
+        bool isMoving;
+    };
+    
+    static std::vector<Door> s_doors;
+    static void updateDoorAnimation(float dt);
+    static void toggleDoor(const glm::vec3& playerPos, float maxDistance = 3.0f, const glm::vec3& forwardDir = glm::vec3(0,0,1));
 };

@@ -42,6 +42,7 @@ public:
     glm::vec3 GetPosition() const { return Position; }
     glm::vec3 GetFront() const { return Front; }
     glm::vec3 GetUp() const { return Up; }
+    void SetPosition(const glm::vec3& pos) { Position = pos; }
 
     // Configurable parameters
     float MovementSpeed = 2.5f;
