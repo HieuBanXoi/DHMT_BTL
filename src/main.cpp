@@ -398,7 +398,7 @@ int main() {
     ImGui_ImplOpenGL3_Init("#version 460");
 
     // Build resources: shader, geometry VAO and the school scene
-    // Load shaders
+    // Load shaders (paths relative to executable location)
     Shader sceneShader("shaders/scene.vs", "shaders/scene_lighting.fs");
     Shader skyboxShader("shaders/scene.vs", "shaders/skybox_blend.fs");
     // Create cube VAO 
@@ -428,8 +428,8 @@ int main() {
     });
 
     // --- PARTICLE SYSTEM SETUP ---
-    // Use absolute paths to avoid CWD issues
-    Shader particleShader("D:/HocTap/DHMT/BTL/glsl shaders/particle.vs", "D:/HocTap/DHMT/BTL/glsl shaders/particle.fs");
+    // Use relative paths for portability across different machines
+    Shader particleShader("shaders/particle.vs", "shaders/particle.fs");
     ParticleSystem fountainParticles(1000); // 1000 particles
     // Spawn at fountain top: (28.0, 6.8, 18.0)
     fountainParticles.SpawnPosition = glm::vec3(28.0f, 6.8f, 18.0f);
