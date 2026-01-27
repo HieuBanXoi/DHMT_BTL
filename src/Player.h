@@ -28,6 +28,11 @@ private:
     float stepHeight = 0.4f; // Allow stepping up substantial stairs
     float baseSpeed = 7.5f; // Reduced speed by default (was 15.0)
     
+    // Fly Mode
+    bool isFlyMode = false;
+    float flySpeed = 15.0f;
+    bool flyTogglePressed = false; 
+    
     // Helper to get player AABB at specific position
     AABB GetPlayerBox(const glm::vec3& pos) const;
     

@@ -52,7 +52,7 @@ uniform vec3 ambientColor;
 uniform vec3 albedo;
 
 // Point lights (streetlights)
-#define MAX_POINT_LIGHTS 20
+#define MAX_POINT_LIGHTS 100
 uniform int numPointLights;
 uniform PointLight pointLights[MAX_POINT_LIGHTS];
 

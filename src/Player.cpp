@@ -79,17 +79,58 @@ float Player::GetFloorHeight(const glm::vec3& pos, const std::vector<AABB>& coll
 }
 
 void Player::ProcessInputs(GLFWwindow* window, float deltaTime, const std::vector<AABB>& colliders) {
-    // 0. Update Base Speed (Dynamic Adjustment)
-    if (glfwGetKey(window, GLFW_KEY_RIGHT_BRACKET) == GLFW_PRESS) {
-        baseSpeed += 10.0f * deltaTime; // Increase
-        std::cout << "Speed: " << baseSpeed << std::endl;
-    }
-    if (glfwGetKey(window, GLFW_KEY_LEFT_BRACKET) == GLFW_PRESS) {
-        baseSpeed -= 10.0f * deltaTime; // Decrease
-        if (baseSpeed < 1.0f) baseSpeed = 1.0f;
-        std::cout << "Speed: " << baseSpeed << std::endl;
+    // 0. Toggle Fly Mode (V Key)
+    if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
+        if (!flyTogglePressed) {
+            isFlyMode = !isFlyMode;
+            flyTogglePressed = true;
+            std::cout << "Fly Mode: " << (isFlyMode ? "ON" : "OFF") << std::endl;
+            velocity = glm::vec3(0.0f); // Reset velocity
+        }
+    } else {
+        flyTogglePressed = false;
     }
 
+    // 0. Update Base/Fly Speed (Dynamic Adjustment)
+    float& currentSpeedVar = isFlyMode ? flySpeed : baseSpeed;
+    if (glfwGetKey(window, GLFW_KEY_RIGHT_BRACKET) == GLFW_PRESS) {
+        currentSpeedVar += 10.0f * deltaTime; // Increase
+        std::cout << (isFlyMode ? "FlySpeed: " : "Speed: ") << currentSpeedVar << std::endl;
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT_BRACKET) == GLFW_PRESS) {
+        currentSpeedVar -= 10.0f * deltaTime; // Decrease
+        if (currentSpeedVar < 1.0f) currentSpeedVar = 1.0f;
+        std::cout << (isFlyMode ? "FlySpeed: " : "Speed: ") << currentSpeedVar << std::endl;
+    }
+
+    glm::vec3 currentPos = camera.GetPosition();
+
+    // === FLY MODE LOGIC ===
+    if (isFlyMode) {
+        float moveSpeed = flySpeed;
+        if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) moveSpeed *= 2.0f;
+        
+        glm::vec3 velocity(0.0f);
+        
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) velocity += camera.GetFront();
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) velocity -= camera.GetFront();
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) velocity -= camera.GetRight();
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) velocity += camera.GetRight();
+        // Up/Down
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) velocity += camera.GetUp();
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) velocity -= camera.GetUp();
+        
+        if (glm::length(velocity) > 0.0f) {
+            velocity = glm::normalize(velocity) * moveSpeed;
+            currentPos += velocity * deltaTime;
+        }
+        
+        camera.SetPosition(currentPos);
+        return; // Skip physics
+    }
+
+    // === WALKING MODE LOGIC (EXISTING) ===
+    
     // 1. Update Speed
     // Boost speed largely
     float moveSpeed = baseSpeed; // Use member variable
@@ -113,7 +154,7 @@ void Player::ProcessInputs(GLFWwindow* window, float deltaTime, const std::vecto
         targetVelXZ = glm::normalize(targetVelXZ) * moveSpeed;
 
     // 3. Move Horizontally (Slide & Step)
-    glm::vec3 currentPos = camera.GetPosition();
+    // glm::vec3 currentPos = camera.GetPosition(); // Already declared
     glm::vec3 nextPos = currentPos + targetVelXZ * deltaTime;
     
     // Attempt FULL Move
@@ -129,16 +170,6 @@ void Player::ProcessInputs(GLFWwindow* window, float deltaTime, const std::vecto
         
         if (!CheckCollision(stepPos, colliders)) {
             // Success! We can move if we step up.
-            // But we don't snap Y immediately here, we let Gravity/Grounding handle the Y snap?
-            // Actually, if we are moving onto a higher platform, we should probably snap XZ and allow Y to be handled next.
-            // But Wait, CheckCollision checks a box. If we just move XZ, our original Y box will collide.
-            // So we MUST move Y up to physically reside there.
-            // But if we just move Y up, we are "flying".
-            // Let's rely on finding ground to snap us.
-            // If we move XZ overlapping the step, 'GetFloorHeight' at new XZ should return the step height.
-            // But 'CheckCollision' prevents us from entering that XZ because we are too low.
-            
-            // So: We accept the XZ move, AND we lift Y temporarily to clear the obstacle.
             currentPos.x = nextPos.x;
             currentPos.z = nextPos.z;
             currentPos.y += stepHeight; // Lift up
@@ -202,10 +233,6 @@ void Player::ProcessInputs(GLFWwindow* window, float deltaTime, const std::vecto
     
     // 5. Jump
     if (isGrounded && glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
-        // velocity.y = jumpForce;
-        // isGrounded = false;
-        // User didn't strictly ask for jump, but it helps navigation.
-        // Let's enable it.
         velocity.y = jumpForce;
         isGrounded = false;
         // Lift slightly to avoid immediate ground snap?

@@ -41,6 +41,7 @@ public:
     // Accessors
     glm::vec3 GetPosition() const { return Position; }
     glm::vec3 GetFront() const { return Front; }
+    glm::vec3 GetRight() const { return Right; }
     glm::vec3 GetUp() const { return Up; }
     void SetPosition(const glm::vec3& pos) { Position = pos; }
 

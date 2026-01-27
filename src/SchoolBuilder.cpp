@@ -17,6 +17,74 @@ static std::shared_ptr<MeshNode> createCuboid(glm::vec3 size, glm::vec3 color, g
     return node;
 }
 
+// Helper to create a simple car
+static SceneNode::Ptr createCar(glm::vec3 color) {
+    auto carNode = std::make_shared<SceneNode>();
+    
+    // Chassis (Body)
+    auto chassis = createCuboid(glm::vec3(4.5f, 1.0f, 2.0f), color, glm::vec3(0.0f, 0.7f, 0.0f));
+    carNode->AddChild(chassis);
+    
+    // Cabin (Top)
+    auto cabin = createCuboid(glm::vec3(2.5f, 0.8f, 1.8f), color * 1.2f, glm::vec3(-0.5f, 1.6f, 0.0f));
+    carNode->AddChild(cabin);
+    
+    // Windows (Black)
+    auto windowL = createCuboid(glm::vec3(1.5f, 0.5f, 1.85f), glm::vec3(0.1f), glm::vec3(-0.5f, 1.65f, 0.0f));
+    carNode->AddChild(windowL);
+    
+    // Wheels (Indices 3, 4, 5, 6)
+    glm::vec3 wheelColor(0.1f, 0.1f, 0.1f);
+    
+    // Note: Cylinder is Y-axis aligned, Radius 0.5, Height 1.0.
+    // We want Radius 0.4 (Scale 0.8), Width 0.4 (Scale 0.4).
+    // And oriented so the circular face is in the YZ plane? No, XZ plane?
+    // Wheels roll along X axis. The axle is along Z axis.
+    // So Cylinder Y-axis should map to World Z-axis.
+    // Rotate 90 deg around X axis.
+    
+    auto createWheel = [&](float x, float z) {
+        auto wheel = std::make_shared<MeshNode>(MeshType::Cylinder); // Cylinder Mesh
+        wheel->material.albedo = wheelColor;
+        
+        // Initial Transform (No rotation yet, just placement and orientation)
+        glm::mat4 t(1.0f);
+        t = glm::translate(t, glm::vec3(x, 0.4f, z)); // Center of wheel
+        // Rotate cylinder to align with Z axis (Axle)
+        t = glm::rotate(t, glm::radians(90.0f), glm::vec3(1, 0, 0)); 
+        // Scale: X=Radius*2, Y=Width, Z=Radius*2 (Relative to rotated frame?)
+        // Cylinder local: Radius in XZ, Height in Y.
+        // After RotX(90): Local Y is World Z. Local X is World X. Local Z is World -Y.
+        // We want World X/Y to be Radius dimensions. World Z to be Width.
+        // So Scale Local X (Radius), Local Y (Height/Width), Local Z (Radius).
+        // Radius 0.4 -> Scale 0.8 (since base is 0.5).
+        // Width 0.4 -> Scale 0.4 (since height is 1.0).
+        t = glm::scale(t, glm::vec3(0.8f, 0.4f, 0.8f)); 
+        
+        wheel->SetLocalTransform(t);
+        carNode->AddChild(wheel);
+    };
+    
+    createWheel(1.5f, 1.0f);  // Front Left (Index 3)
+    createWheel(1.5f, -1.0f); // Front Right (Index 4)
+    createWheel(-1.5f, 1.0f); // Back Left (Index 5)
+    createWheel(-1.5f, -1.0f);// Back Right (Index 6)
+    
+    // Headlights (Yellow)
+    auto headlightL = createCuboid(glm::vec3(0.1f, 0.3f, 0.5f), glm::vec3(1.0f, 1.0f, 0.5f), glm::vec3(2.25f, 0.8f, 0.6f));
+    carNode->AddChild(headlightL);
+    auto headlightR = createCuboid(glm::vec3(0.1f, 0.3f, 0.5f), glm::vec3(1.0f, 1.0f, 0.5f), glm::vec3(2.25f, 0.8f, -0.6f));
+    carNode->AddChild(headlightR);
+
+    // Taillights (Red)
+    auto taillightL = createCuboid(glm::vec3(0.1f, 0.3f, 0.5f), glm::vec3(0.8f, 0.0f, 0.0f), glm::vec3(-2.25f, 0.8f, 0.6f));
+    carNode->AddChild(taillightL);
+    auto taillightR = createCuboid(glm::vec3(0.1f, 0.3f, 0.5f), glm::vec3(0.8f, 0.0f, 0.0f), glm::vec3(-2.25f, 0.8f, -0.6f));
+    carNode->AddChild(taillightR);
+    
+    return carNode;
+}
+
 // Helper to create a detailed window with frame
 // returns a SceneNode containing frame and glass
 static SceneNode::Ptr createWindow(float width, float height)
@@ -3726,6 +3794,51 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
         t = glm::scale(t, glm::vec3(4.0f, 1.0f, 20.0f)); // Wide path, long Z
         path->SetLocalTransform(t); // goes from Z=-10 to Z=10 roughly
         schoolParams->AddChild(path);
+
+        // NEW: Horizontal Road near Gate (Crosses main path at Z=40 - OUTSIDE)
+        auto crossPath = std::make_shared<MeshNode>(MeshType::Plane);
+        crossPath->material.albedo = glm::vec3(0.2f, 0.2f, 0.22f); // Dark Asphalt
+        glm::mat4 tCross = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.01f, 40.0f)); // Located at Z=40
+        tCross = glm::scale(tCross, glm::vec3(100.0f, 1.0f, 10.0f)); // 100m Wide (X), 10m Deep (Z)
+        crossPath->SetLocalTransform(tCross); 
+        schoolParams->AddChild(crossPath);
+
+        // Dashed Center Lines
+        int numDashes = 50;
+        float roadWidth = 100.0f;
+        float dashLen = 1.0f;
+        float gapLen = 1.0f;
+        for (int i = 0; i < numDashes; ++i) {
+            float x = -roadWidth/2.0f + i * (dashLen + gapLen) + 1.0f;
+            auto dash = std::make_shared<MeshNode>(MeshType::Plane);
+            dash->material.albedo = glm::vec3(1.0f, 1.0f, 1.0f); // White lines
+            glm::mat4 tDash = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.02f, 40.0f)); 
+            tDash = glm::scale(tDash, glm::vec3(dashLen, 1.0f, 0.2f)); 
+            dash->SetLocalTransform(tDash);
+            schoolParams->AddChild(dash);
+        }
+
+        // NEW: Streetlights along Horizontal Road
+        // Place lights every 15m from -45 to 45 (100m road: [-50, 50])
+        float hLightZ = 40.0f;
+        float hLightHeight = 4.0f;
+        
+        for (float x = -45.0f; x <= 45.0f; x += 15.0f) {
+            // Skip center light (X=0) to clear the gate entrance
+            if (std::abs(x) < 1.0f) continue;
+
+            // Front side of path (Z = 40 + 6.0)
+            auto lightF = createStreetlight(hLightHeight);
+            lightF->SetLocalTransform(glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, hLightZ + 6.0f)));
+            schoolParams->AddChild(lightF);
+
+            // Back side of path (Z = 40 - 6.0)
+            auto lightB = createStreetlight(hLightHeight);
+            glm::mat4 tB = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, hLightZ - 6.0f));
+            tB = glm::rotate(tB, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            lightB->SetLocalTransform(tB);
+            schoolParams->AddChild(lightB);
+        }
     }
     
     // -- Perimeter Wall/Fence System --
@@ -4164,6 +4277,33 @@ SceneNode::Ptr SchoolBuilder::generateSchool(float size)
         }
     }
 
+    // -- Animated Cars --
+    {
+        s_cars.clear();
+        
+        // Car 1: Red, Lane 1 (Z=37.5), Moving Right (+X)
+        auto car1 = createCar(glm::vec3(0.9f, 0.1f, 0.1f));
+        glm::mat4 t1 = glm::translate(glm::mat4(1.0f), glm::vec3(-40.0f, 0.0f, 37.5f));
+        car1->SetLocalTransform(t1);
+        schoolParams->AddChild(car1);
+        s_cars.push_back({car1, 8.0f, -60.0f, 60.0f, -40.0f, 1}); // Speed 8 m/s, Limit +/- 60
+        
+        // Car 2: Blue, Lane 2 (Z=42.5), Moving Left (-X)
+        auto car2 = createCar(glm::vec3(0.1f, 0.3f, 0.9f));
+        glm::mat4 t2 = glm::translate(glm::mat4(1.0f), glm::vec3(40.0f, 0.0f, 42.5f));
+        t2 = glm::rotate(t2, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Face Left
+        car2->SetLocalTransform(t2);
+        schoolParams->AddChild(car2);
+        s_cars.push_back({car2, 10.0f, 60.0f, -60.0f, 40.0f, -1}); // Speed 10 m/s, Limit +/- 60
+        
+        // Car 3: Yellow, Lane 1 (Z=37.5), Moving Right (+X) - Delayed start
+        auto car3 = createCar(glm::vec3(0.9f, 0.8f, 0.1f));
+        glm::mat4 t3 = glm::translate(glm::mat4(1.0f), glm::vec3(-10.0f, 0.0f, 37.5f));
+        car3->SetLocalTransform(t3);
+        schoolParams->AddChild(car3);
+        s_cars.push_back({car3, 7.0f, -60.0f, 60.0f, -10.0f, 1}); // Speed 7 m/s, Limit +/- 60
+    }
+
     return root;
 }
 
@@ -4547,3 +4687,94 @@ void SchoolBuilder::updateCloudAnimation(SceneNode::Ptr root, float time)
 }
 
 
+// Car Animation Definition
+std::vector<SchoolBuilder::Car> SchoolBuilder::s_cars;
+
+void SchoolBuilder::updateCarAnimation(float dt)
+{
+    for (auto& car : s_cars)
+    {
+        car.currentX += car.speed * car.direction * dt;
+        
+        // Loop logic
+        if (car.direction == 1 && car.currentX > car.endX) {
+             car.currentX = car.startX;
+        } else if (car.direction == -1 && car.currentX < car.endX) {
+             car.currentX = car.startX;
+        }
+        
+        // Update Transform
+        glm::mat4 t = glm::mat4(1.0f);
+        // Base position on the road
+        float roadZ = (car.direction == 1) ? 37.5f : 42.5f;
+        
+        t = glm::translate(t, glm::vec3(car.currentX, 0.0f, roadZ));
+        if (car.direction == -1) {
+            t = glm::rotate(t, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        }
+        car.node->SetLocalTransform(t);
+        
+        // --- Animate Wheels (Spinning) ---
+        // Wheels are children indices 3, 4, 5, 6
+        // Wheel Radius = 0.4. Circumference = 2*PI*0.4 ≈ 2.51
+        // Angle = Distance / Radius (in radians)
+        // Distance traveled = currentX (relative to some start)
+        // Spin direction depends on car direction.
+        // If moving +X (Forward), wheels roll forward.
+        // In local Car space, Forward is +X.
+        // Cylinder Axle is local Z.
+        // Rolling forward means rotating around Z axis?
+        // Let's verify: RotX(90) transformed cylinder.
+        // Cylinder Y -> World Z. Cylinder X -> World X. Cylinder Z -> World -Y.
+        // So in Cylinder Local space:
+        // We want to rotate around Cylinder Y axis (World Z) to spin axis? No.
+        // We want to rotate around World Z axis.
+        // In Local Car Space, coordinates are X, Y, Z.
+        // Wheel is at (x, 0.4, z).
+        // To roll along X, it must rotate around Z axis.
+        // Angle = -currentX / 0.4f (Negative for +X motion?)
+        // Let's rely on standard: Rotate(angle, vec3(0,0,1)).
+        
+        float wheelRadius = 0.4f;
+        // Calculate angle based on absolute X position for continuous rolling
+        // Note: car.direction affects how "forward" maps to world X, but wheel spin should match movement.
+        // If car moves +X, wheels spin negative Z? (Right Hand Rule: Thumb +Z, fingers curl X->Y)
+        // Rolling forward (+X) means top goes +X, bottom goes -X?
+        // Actually, let's just use angle = -currentX / radius.
+        // If Car is flipped 180 (for -X movement), its local Forward is +X in its frame?
+        // Yes, we rotated the whole car 180. So car local +X is world -X.
+        // So we can always use local rotation relative to car movement.
+        // Car moves speed * dt * direction.
+        // Total distance? currentX is world position.
+        // If we use currentX, we get absolute rotation phase.
+        
+        float spinAngle = -car.currentX / wheelRadius;
+        
+        // We need to fetch the wheels and apply transform
+        // Indices 3, 4, 5, 6.
+        if (car.node->children.size() >= 7) {
+             // Offsets for wheels (from createCar)
+             float wheelX[] = {1.5f, 1.5f, -1.5f, -1.5f};
+             float wheelZ[] = {1.0f, -1.0f, 1.0f, -1.0f};
+             
+             for (int i = 0; i < 4; ++i) {
+                 auto wheel = car.node->children[3 + i];
+                 
+                 // Reconstruct Wheel Transform
+                 glm::mat4 wt(1.0f);
+                 wt = glm::translate(wt, glm::vec3(wheelX[i], 0.4f, wheelZ[i])); // Position
+                 
+                 // Rotate around Z axis for Spin
+                 wt = glm::rotate(wt, spinAngle, glm::vec3(0, 0, 1));
+                 
+                 // Original Orientation: Rotate 90 deg around X axis
+                 wt = glm::rotate(wt, glm::radians(90.0f), glm::vec3(1, 0, 0));
+                 
+                 // Scale
+                 wt = glm::scale(wt, glm::vec3(0.8f, 0.4f, 0.8f));
+                 
+                 wheel->SetLocalTransform(wt);
+             }
+        }
+    }
+}

@@ -19,7 +19,8 @@ enum class MeshType
     Plane,
     Pyramid,
     Cylinder,
-    Cone
+    Cone,
+    Sphere
 };
 
 // A SceneNode subclass that carries a mesh type + basic material information.
@@ -116,4 +117,17 @@ public:
     static std::vector<Door> s_doors;
     static void updateDoorAnimation(float dt);
     static void toggleDoor(const glm::vec3& playerPos, float maxDistance = 3.0f, const glm::vec3& forwardDir = glm::vec3(0,0,1));
+
+    // Car Animation System
+    struct Car {
+        SceneNode::Ptr node;
+        float speed;        // Speed in m/s
+        float startX;       // Reset position
+        float endX;         // Limit position
+        float currentX;     // Current X position
+        int direction;      // 1 for +X, -1 for -X
+    };
+    
+    static std::vector<Car> s_cars;
+    static void updateCarAnimation(float dt);
 };

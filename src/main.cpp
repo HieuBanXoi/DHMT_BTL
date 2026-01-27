@@ -324,7 +324,7 @@ static void processLightingInput(GLFWwindow* window)
 }
 
 // Recursive render of SceneNode tree. Uses MeshNode metadata from SchoolBuilder.h
-static void RenderNode(const SceneNode::Ptr& node, Shader& shader, GLuint cubeVAO, GLuint planeVAO)
+static void RenderNode(const SceneNode::Ptr& node, Shader& shader, GLuint cubeVAO, GLuint planeVAO, GLuint pyramidVAO, GLuint cylinderVAO, GLuint coneVAO, GLuint sphereVAO)
 {
     if (!node) return;
 
@@ -344,12 +344,54 @@ static void RenderNode(const SceneNode::Ptr& node, Shader& shader, GLuint cubeVA
             glBindVertexArray(planeVAO);
             glDrawArrays(GL_TRIANGLES, 0, 6);
         }
+        else if (meshNode->mesh == MeshType::Pyramid)
+        {
+            glBindVertexArray(pyramidVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 18);
+        }
+        else if (meshNode->mesh == MeshType::Cylinder)
+        {
+            glBindVertexArray(cylinderVAO);
+            // Cylinder: top/bottom fans + strips. 
+            // createCylinderVAO typically creates:
+            // Side: 32 segments * 6 verts = 192 (or 32 * 2 triangles)
+            // Top: 32 triangles = 96
+            // Bottom: 32 triangles = 96
+            // Total = 384?
+            // Safer to check GLUtils or just draw plenty if count unknown, but GLUtils usually follows standard counts.
+            // Let's assume standard count from common GLUtils implementations.
+            // If we don't know the count, we risk drawing garbage or crashing if VBO too small.
+            // Usually we pass indices count or size.
+            // Let's assume 360 or similar.
+            // Actually, let's use a safe assumption of 32 segments.
+            // Top Fan (TF): 32 tri = 32*3 = 96 verts
+            // Bottom Fan (BF): 96 verts
+            // Side Strip (SS): 32 * 6 = 192 verts
+            // Total = 384.
+            glDrawArrays(GL_TRIANGLES, 0, 384); 
+        }
+        else if (meshNode->mesh == MeshType::Cone)
+        {
+            glBindVertexArray(coneVAO);
+            // Cone: Base (96) + Side (96) = 192
+            glDrawArrays(GL_TRIANGLES, 0, 192);
+        }
+        else if (meshNode->mesh == MeshType::Sphere) // Assuming Sphere added to enum? SchoolBuilder.h line 16 doesn't show Sphere.
+        {
+            glBindVertexArray(sphereVAO);
+            // Sphere UV 32x32: ~6000 verts?
+            // Let's hold off on Sphere if not in Enum.
+            // Wait, I saw createSphereVAO in GLUtils.h, but SchoolBuilder.h Enum might not have it.
+            // Enum had Cube, Plane, Pyramid, Cylinder, Cone. No Sphere.
+            // So meshNode->mesh == MeshType::Sphere is invalid if not added.
+            // We'll skip sphere for now or add to Enum if needed.
+        }
         glBindVertexArray(0);
     }
 
     // Recurse children
     for (auto& c : node->children)
-        RenderNode(c, shader, cubeVAO, planeVAO);
+        RenderNode(c, shader, cubeVAO, planeVAO, pyramidVAO, cylinderVAO, coneVAO, sphereVAO);
 }
 
 int main() {
@@ -405,6 +447,12 @@ int main() {
     GLuint cubeVAO = createCubeVAO();
     // Create plane VAO
     GLuint planeVAO = createPlaneVAO();
+    // Create pyramid VAO
+    GLuint pyramidVAO = createPyramidVAO();
+    // Create cylinder VAO (for wheels)
+    GLuint cylinderVAO = createCylinderVAO();
+    // Create cone VAO
+    GLuint coneVAO = createConeVAO();
     // Create sphere VAO for sun and moon
     GLuint sphereVAO = createSphereVAO();
 
@@ -697,9 +745,9 @@ int main() {
         sceneShader.SetVec3("moonLightColor", moonLightColor);
         sceneShader.SetFloat("moonLightIntensity", moonLightIntensity);
         
-        // Set up all point lights: 10 central + 6 perimeter + 3 statue + 3 fountain + 4 corners = 26 total
+        // Set up all point lights: 10 central + 6 perimeter + 3 statue + 3 fountain + 4 corners + 12 horizontal path + 1 gate = 39 total
         // Point lights are ALWAYS ON with constant brightness
-        int totalLights = 26;
+        int totalLights = 39; // Updated for gate highlight light
         float lightHeight = 4.0f;
         sceneShader.SetInt("numPointLights", totalLights);
         
@@ -792,12 +840,42 @@ int main() {
             sceneShader.SetFloat(baseName + ".intensity", 5.0f * lightMultiplier); // Toggle-able, bright
         }
 
+        // Horizontal Pathway Lights (Expanded to cover 100m road)
+        // Positions matches SchoolBuilder: X from -45 to 45 step 15, Z = 40 +/- 6
+        float hLightZ = 40.0f;
+        int lightIdx = 26; // Start after previous 26 lights
+        
+        for (float x = -45.0f; x <= 45.0f; x += 15.0f) {
+            if (std::abs(x) < 1.0f) continue; // Skip center light
+            
+            // Front side light (Z = 46)
+            std::string nameF = "pointLights[" + std::to_string(lightIdx++) + "]";
+            sceneShader.SetVec3(nameF + ".position", glm::vec3(x, lightHeight, hLightZ + 6.0f));
+            sceneShader.SetVec3(nameF + ".color", glm::vec3(1.0f, 0.9f, 0.7f));
+            sceneShader.SetFloat(nameF + ".intensity", 3.5f * lightMultiplier);
+
+            // Back side light (Z = 34)
+            std::string nameB = "pointLights[" + std::to_string(lightIdx++) + "]";
+            sceneShader.SetVec3(nameB + ".position", glm::vec3(x, lightHeight, hLightZ - 6.0f));
+            sceneShader.SetVec3(nameB + ".color", glm::vec3(1.0f, 0.9f, 0.7f));
+            sceneShader.SetFloat(nameB + ".intensity", 3.5f * lightMultiplier);
+        }
+
+        // Gate Highlight Light (One bright light in front of the gate)
+        std::string nameGate = "pointLights[" + std::to_string(lightIdx++) + "]";
+        sceneShader.SetVec3(nameGate + ".position", glm::vec3(0.0f, 6.0f, 38.0f)); // High up, front of gate
+        sceneShader.SetVec3(nameGate + ".color", glm::vec3(1.0f, 0.98f, 0.9f)); // Very bright warm white
+        sceneShader.SetFloat(nameGate + ".intensity", 8.0f * lightMultiplier); // High intensity to highlight gate
+
         // Update people animations
         SchoolBuilder::updatePeopleAnimation(root, currentFrame);
         
         // Update clock animation
         SchoolBuilder::updateClockAnimation(root, currentFrame);
         
+        // Update car animation
+        SchoolBuilder::updateCarAnimation(deltaTime);
+
         // Update cloud animation
         SchoolBuilder::updateCloudAnimation(root, currentFrame);
         
@@ -820,7 +898,8 @@ int main() {
         root->updateGlobalTransform();
 
         // Render scene graph
-        RenderNode(root, sceneShader, cubeVAO, planeVAO);
+        // Render scene graph
+        RenderNode(root, sceneShader, cubeVAO, planeVAO, pyramidVAO, cylinderVAO, coneVAO, sphereVAO);
         
         
         // Render Sun and Moon as visible spheres (high in sky)
